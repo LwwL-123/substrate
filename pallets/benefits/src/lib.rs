@@ -6,7 +6,6 @@
 
 use sp_std::prelude::*;
 use frame_support::{
-    decl_event, decl_storage, decl_module, decl_error, ensure,
     weights::{Weight},
     dispatch::HasCompact,
     traits::{Currency, ReservableCurrency, Get,
@@ -15,7 +14,6 @@ use frame_support::{
 };
 
 
-use frame_system::ensure_signed;
 use codec::{Encode, Decode};
 #[cfg(feature = "std")]
 use sp_runtime::DispatchError;
@@ -118,6 +116,7 @@ pub enum FundsType {
 }
 
 impl<Balance: HasCompact + Copy + Saturating + AtLeast32BitUnsigned> SworkBenefit<Balance> {
+    // 解锁到期的金额
     fn consolidate_unlocked(mut self, current_era: EraIndex) -> Self {
         //总金额
         let mut total_funds = self.total_funds;
@@ -230,10 +229,10 @@ pub mod pallet {
         type Currency: ReservableCurrency<Self::AccountId>;
         // The amount for one report work extrinsic
         type BenefitReportWorkCost: Get<BalanceOf<Self>>;
-        // The ratio between total benefit limitation and total reward
+        // The ratio between total benefits limitation and total reward
         #[pallet::constant]
         type BenefitsLimitRatio: Get<Perbill>;
-        // The ratio that benefit will cost, the remaining fee would still be charged
+        // The ratio that benefits will cost, the remaining fee would still be charged
         #[pallet::constant]
         type BenefitMarketCostRatio: Get<Perbill>;
         /// Number of eras that staked funds must remain bonded for.
@@ -288,7 +287,7 @@ pub mod pallet {
         /// 重新绑定优惠金额成功
         /// 账户/数量/优惠类型
         RebondBenefitFundsSuccess(T::AccountId, BalanceOf<T>, FundsType),
-        /// Withdraw benefit funds success
+        /// 提取解锁的福利资金
         /// 账户/数量/优惠类型
         WithdrawBenefitFundsSuccess(T::AccountId, BalanceOf<T>),
     }
@@ -312,7 +311,7 @@ pub mod pallet {
     impl<T: Config> Pallet<T> {
         /// 添加福利金额
         #[pallet::weight(T::WeightInfo::add_benefit_funds())]
-        pub fn add_benefit_funds(origin:OriginFor<T>, value: BalanceOf<T>, funds_type: FundsType) -> DispatchResult {
+        pub fn add_benefit_funds(origin:OriginFor<T>, #[pallet::compact] value: BalanceOf<T>, funds_type: FundsType) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
             // 1. 把福利从余额移动到预留余额
@@ -345,7 +344,7 @@ pub mod pallet {
 
         /// 锁定优惠金额
         #[pallet::weight(T::WeightInfo::cut_benefit_funds())]
-        pub fn cut_benefit_funds(origin:OriginFor<T>, value: BalanceOf<T>, funds_type: FundsType) -> DispatchResult {
+        pub fn cut_benefit_funds(origin:OriginFor<T>, #[pallet::compact] value: BalanceOf<T>, funds_type: FundsType) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
             match funds_type {
@@ -421,7 +420,107 @@ pub mod pallet {
         }
 
 
+        /// 提取解锁的福利资金
+        #[pallet::weight(T::WeightInfo::withdraw_benefit_funds())]
+        pub fn withdraw_benefit_funds(origin:OriginFor<T>) -> DispatchResult {
+            let who = ensure_signed(origin)?;
 
+            let mut unreserved_value: BalanceOf<T> = Zero::zero();
+            if <SworkBenefits<T>>::contains_key(&who) {
+                // 检查并更新work账户金额
+                Self::check_and_update_swork_funds(&who);
+                let mut benefit = Self::swork_benefits(&who);
+
+                // 2. 更新总金额
+                let old_total_funds = benefit.total_funds;
+                let active_era = Self::current_benefits().active_era;
+                // 解锁到期的锁定金额
+                benefit = benefit.consolidate_unlocked(active_era);
+
+                // 3. 取消保留金额
+                let to_unreserved_value = old_total_funds.saturating_sub(benefit.total_funds);
+                T::Currency::unreserve(&who, to_unreserved_value);
+
+                // 4. 更新或删除报告矿工的费用减免优惠
+                // 如果未解锁金额为0且活跃金额为0，删除SworkBenefits，否则将最近benefit插入
+                if benefit.unlocking_funds.is_empty() && benefit.active_funds.is_zero() {
+                    <SworkBenefits<T>>::remove(&who);
+                } else {
+                    <SworkBenefits<T>>::insert(&who, benefit);
+                }
+
+                unreserved_value = unreserved_value.saturating_add(to_unreserved_value);
+            }
+            if <MarketBenefits<T>>::contains_key(&who) {
+                Self::check_and_update_market_funds(&who);
+                let mut benefit = Self::market_benefits(&who);
+
+                // 2. 更新总金额
+                let old_total_funds = benefit.total_funds;
+                let active_era = Self::current_benefits().active_era;
+                benefit = benefit.consolidate_unlocked(active_era);
+
+                // 3. 取消保留金额
+                let to_unreserved_value = old_total_funds.saturating_sub(benefit.total_funds);
+                T::Currency::unreserve(&who, to_unreserved_value);
+
+                // 4. 更新或删除市场的费用减免优惠
+                if benefit.unlocking_funds.is_empty() && benefit.active_funds.is_zero() && benefit.file_reward.is_zero() {
+                    <MarketBenefits<T>>::remove(&who);
+                } else {
+                    <MarketBenefits<T>>::insert(&who, benefit);
+                }
+
+                unreserved_value = unreserved_value.saturating_add(to_unreserved_value);
+            }
+
+            // 5. Emit success
+            Self::deposit_event(Event::<T>::WithdrawBenefitFundsSuccess(who.clone(), unreserved_value));
+
+            Ok(())
+        }
+
+        /// 返还福利基金
+        #[pallet::weight(T::WeightInfo::rebond_benefit_funds())]
+        pub fn rebond_benefit_funds(origin:OriginFor<T>, #[pallet::compact] value: BalanceOf<T>, funds_type: FundsType) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+
+            match funds_type {
+                FundsType::SWORK => {
+                    // 1. 获得benefit
+                    ensure!(<SworkBenefits<T>>::contains_key(&who), Error::<T>::InvalidTarget);
+                    let mut benefit = Self::swork_benefits(&who);
+                    ensure!(!benefit.unlocking_funds.is_empty(), Error::<T>::NoUnlockChunk);
+
+                    // 2. 重新绑定
+                    benefit = benefit.rebond(value);
+
+                    ensure!(benefit.active_funds >= T::Currency::minimum_balance(), Error::<T>::InsufficientValue);
+                    // 3. 根据活跃资金更新总费用减免计数
+                    benefit.total_fee_reduction_count = Self::calculate_total_fee_reduction_count(&benefit.active_funds);
+                    <SworkBenefits<T>>::insert(&who, benefit);
+                },
+                FundsType::MARKET => {
+                    // 1. 获取benefit
+                    ensure!(<MarketBenefits<T>>::contains_key(&who), Error::<T>::InvalidTarget);
+                    let mut benefit = Self::market_benefits(&who);
+                    let old_active_funds = benefit.active_funds;
+                    ensure!(!benefit.unlocking_funds.is_empty(), Error::<T>::NoUnlockChunk);
+
+                    // 2. 重新绑定金额
+                    benefit = benefit.rebond(value);
+
+                    ensure!(benefit.active_funds >= T::Currency::minimum_balance(), Error::<T>::InsufficientValue);
+                    let new_active_funds = benefit.active_funds;
+                    <MarketBenefits<T>>::insert(&who, benefit);
+                    // 3. Update current benefits
+                    <CurrentBenefits<T>>::mutate(|benefits| { benefits.total_market_active_funds = benefits.total_market_active_funds.saturating_add(new_active_funds).saturating_sub(old_active_funds);});
+                }
+            };
+            // 4.event
+            Self::deposit_event(Event::<T>::RebondBenefitFundsSuccess(who.clone(), value, funds_type));
+            Ok(())
+        }
     }
 
 
@@ -437,30 +536,177 @@ impl<T: Config> Pallet<T> {
         // 降费金额 / 一次降费的金额 = 降费次数
         (*active_funds / T::BenefitReportWorkCost::get()).saturated_into()
     }
+
+    fn check_and_update_swork_funds(who: &T::AccountId) {
+        let mut swork_benefit = Self::swork_benefits(&who);
+        // 获取账户的预留金额
+        let reserved_value = T::Currency::reserved_balance(who);
+        // 如果 swork福利总金额 < 预留金额
+        if swork_benefit.total_funds <= reserved_value {
+            return;
+        }
+        // 修复金额错误问题
+        let old_total_funds = swork_benefit.total_funds;
+        swork_benefit.total_funds = reserved_value;
+        swork_benefit.active_funds = swork_benefit.active_funds.saturating_add(swork_benefit.total_funds).saturating_sub(old_total_funds);
+        swork_benefit.total_fee_reduction_count = Self::calculate_total_fee_reduction_count(&swork_benefit.active_funds);
+        <SworkBenefits<T>>::insert(&who, swork_benefit);
+    }
+
+    fn check_and_update_market_funds(who: &T::AccountId) {
+        let mut market_benefit = Self::market_benefits(&who);
+        let reserved_value = T::Currency::reserved_balance(who);
+        if market_benefit.total_funds <= reserved_value {
+            return;
+        }
+        // Something wrong, fix it
+        let old_total_funds = market_benefit.total_funds;
+        let old_active_funds = market_benefit.active_funds;
+        market_benefit.total_funds = reserved_value;
+        market_benefit.active_funds = market_benefit.active_funds.saturating_add(market_benefit.total_funds).saturating_sub(old_total_funds);
+        <CurrentBenefits<T>>::mutate(|benefits| { benefits.total_market_active_funds = benefits.total_market_active_funds.saturating_add(market_benefit.active_funds).saturating_sub(old_active_funds);});
+        <MarketBenefits<T>>::insert(&who, market_benefit);
+    }
+
+    /// 返回值是上一个时代使用的费用配额
+    pub fn do_update_era_benefit(next_era: EraIndex, total_fee_reduction_quota: BalanceOf<T>) -> BalanceOf<T> {
+        // 获取整体福利信息
+        let mut current_benefits = Self::current_benefits();
+        // 存储上一个时代的使用费减免
+        let used_fee_reduction_quota = current_benefits.used_fee_reduction_quota;
+        // 开启下一个纪元并为其设置活跃纪元
+        current_benefits.active_era = next_era;
+        // 为下一个时代设定新的总收益
+        current_benefits.total_fee_reduction_quota = total_fee_reduction_quota;
+        // 将已使用的福利重置为零
+        current_benefits.used_fee_reduction_quota = Zero::zero();
+        <CurrentBenefits<T>>::put(current_benefits);
+        // 返还上个时代用过的金额
+        used_fee_reduction_quota
+    }
+
+    pub fn maybe_do_reduce_fee(who: &T::AccountId, fee: BalanceOf<T>, reasons: WithdrawReasons) -> Result<NegativeImbalanceOf<T>, DispatchError> {
+        let mut current_benefits = Self::current_benefits();
+        let mut market_benefit = Self::market_benefits(who);
+        // 更新降费
+        // 如果市场最近更新的era编号<最近的活跃era编号，则更新市场era编号，并把已使用降费设置为0
+        Self::maybe_refresh_market_benefit(current_benefits.active_era, &mut market_benefit);
+        // 计算自己的降费份额
+        let fee_reduction_benefits_quota = Self::calculate_fee_reduction_quota(market_benefit.active_funds,
+                                                                               current_benefits.total_market_active_funds,
+                                                                               current_benefits.total_fee_reduction_quota);
+        // 尝试免费减费
+        // 查看此人有自己的减费额度和总收益
+        let fee_reduction_benefit_cost = T::BenefitMarketCostRatio::get() * fee;
+        let (charged_fee, used_fee_reduction) = if market_benefit.used_fee_reduction_quota + fee_reduction_benefit_cost <= fee_reduction_benefits_quota
+            && current_benefits.used_fee_reduction_quota + fee_reduction_benefit_cost <= current_benefits.total_fee_reduction_quota {
+            // 可以免这个费用
+            (fee - fee_reduction_benefit_cost, fee_reduction_benefit_cost)
+        } else {
+            // 免收这笔费用是不行的
+            // 收取的费用为 100%
+            // 费用减免为 0%
+            (fee, Zero::zero())
+        };
+        // 尝试提取货币
+        let result = match T::Currency::withdraw(who, charged_fee, reasons, ExistenceRequirement::KeepAlive) {
+            Ok(mut imbalance) => {
+                // 如果没有 active_funds 以节省数据库写入时间，则不会更新减少细节
+                if !used_fee_reduction.is_zero() {
+                    // 更新降费信息
+                    current_benefits.used_fee_reduction_quota += used_fee_reduction;
+                    market_benefit.used_fee_reduction_quota += used_fee_reduction;
+                    <MarketBenefits<T>>::insert(&who, market_benefit);
+                    <CurrentBenefits<T>>::put(current_benefits);
+                    // 发放免费费用
+                    let new_issued = T::Currency::issue(used_fee_reduction.clone());
+                    imbalance.subsume(new_issued);
+                }
+                Ok(imbalance)
+            }
+            Err(err) => Err(err),
+        };
+        result
+    }
+
+    // 自己市场的活跃金额/总的活跃金额 * 总的降费
+    pub fn calculate_fee_reduction_quota(market_active_funds: BalanceOf<T>, total_market_active_funds: BalanceOf<T>, total_fee_reduction_quota: BalanceOf<T>) -> BalanceOf<T> {
+        Perbill::from_rational(market_active_funds, total_market_active_funds) * total_fee_reduction_quota
+    }
+
+    pub fn maybe_refresh_market_benefit(latest_active_era: EraIndex, market_benefit: &mut MarketBenefit<BalanceOf<T>>) {
+        // 如果市场最近更新的era编号<最近的活跃era编号，则更新市场era编号，并把已使用降费设置为0
+        if market_benefit.refreshed_at < latest_active_era {
+            market_benefit.refreshed_at = latest_active_era;
+            market_benefit.used_fee_reduction_quota = Zero::zero();
+        }
+    }
+
+    pub fn maybe_do_free_count(who: &T::AccountId) -> bool {
+        let active_era = Self::current_benefits().active_era;
+        let mut swork_benefit = Self::swork_benefits(who);
+        Self::maybe_refresh_swork_benefits(active_era, &mut swork_benefit);
+        // 如果没有赌注以节省数据库写入时间，则不会更新减少细节
+        if swork_benefit.used_fee_reduction_count < swork_benefit.total_fee_reduction_count {
+            swork_benefit.used_fee_reduction_count += 1;
+            <SworkBenefits<T>>::insert(&who, swork_benefit);
+            return true;
+        }
+        return false;
+    }
+
+    pub fn maybe_refresh_swork_benefits(latest_active_era: EraIndex, swork_benefit: &mut SworkBenefit<BalanceOf<T>>) {
+        // 如果swork最近更新的era编号<最近的活跃era编号，则更新sworker的era编号，并把已使用降费设置为0
+        if swork_benefit.refreshed_at < latest_active_era {
+            swork_benefit.refreshed_at = latest_active_era;
+            swork_benefit.used_fee_reduction_count = 0;
+        }
+    }
 }
 
-// impl<T:Config> BenefitInterface<T::AccountId, BalanceOf<T>,NegativeImbalanceOf<T>> for Pallet<T>{
-//     fn update_era_benefit(next_era: EraIndex, total_benefits: BalanceOf<T>) -> BalanceOf<T> {
-//         todo!()
-//     }
-//
-//     fn update_reward(who:T::AccountId, value: BalanceOf<T>) {
-//         todo!()
-//     }
-//
-//     fn maybe_reduce_fee(who:T::AccountId, fee: BalanceOf<T>, reasons: WithdrawReasons) -> Result<NegativeImbalanceOf<T>, DispatchError> {
-//         todo!()
-//     }
-//
-//     fn maybe_free_count(who:T::AccountId) -> bool {
-//         todo!()
-//     }
-//
-//     fn get_collateral_and_reward(who:T::AccountId) -> (BalanceOf<T>, BalanceOf<T>) {
-//         todo!()
-//     }
-//
-//     fn get_market_funds_ratio(who:T::AccountId) -> Perbill {
-//         todo!()
-//     }
-// }
+impl<T:Config> BenefitInterface<T::AccountId, BalanceOf<T>,NegativeImbalanceOf<T>> for Pallet<T>{
+    // 更新era奖励
+    fn update_era_benefit(next_era: EraIndex, total_reward: BalanceOf<T>) -> BalanceOf<T> {
+        Self::do_update_era_benefit(next_era, T::BenefitsLimitRatio::get() * total_reward)
+    }
+
+    // 更新市场文件奖励
+    fn update_reward(who:&T::AccountId, value: BalanceOf<T>) {
+        let mut market_benefit = Self::market_benefits(who);
+        market_benefit.file_reward = value;
+
+        // 去除死掉的benefit
+        if market_benefit.unlocking_funds.is_empty() && market_benefit.active_funds.is_zero() && market_benefit.file_reward.is_zero() {
+            <MarketBenefits<T>>::remove(&who);
+        } else {
+            <MarketBenefits<T>>::insert(&who, market_benefit);
+        }
+    }
+
+    // 可能的降费
+    fn maybe_reduce_fee(who:&T::AccountId, fee: BalanceOf<T>, reasons: WithdrawReasons) -> Result<NegativeImbalanceOf<T>, DispatchError> {
+        Self::maybe_do_reduce_fee(who, fee, reasons)
+    }
+
+    // 可能降费的次数
+    fn maybe_free_count(who:&T::AccountId) -> bool {
+        Self::maybe_do_free_count(who)
+
+    }
+
+    // 获得账户的奖励金额
+    fn get_collateral_and_reward(who:&T::AccountId) -> (BalanceOf<T>, BalanceOf<T>) {
+        let market_benefits = Self::market_benefits(who);
+        (market_benefits.active_funds, market_benefits.file_reward)
+    }
+
+
+    fn get_market_funds_ratio(who:&T::AccountId) -> Perbill {
+        let market_benefit = Self::market_benefits(who);
+        if !market_benefit.active_funds.is_zero() {
+            // 市场的活跃金额 / 总的活跃金额
+            return Perbill::from_rational(market_benefit.active_funds, Self::current_benefits().total_market_active_funds);
+        }
+        return Perbill::zero();
+    }
+}

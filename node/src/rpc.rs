@@ -112,7 +112,7 @@ pub fn create_full<C, P ,SC, B>(
 		client,
 		pool,
 		select_chain,
-		chain_spec,
+		chain_spec: _,
 		deny_unsafe,
 		babe,
 		grandpa,

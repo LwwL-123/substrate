@@ -23,7 +23,6 @@ runtime-benchmarks = [
     'frame-system/runtime-benchmarks',
     'hex-literal',
     'pallet-balances/runtime-benchmarks',
-    'pallet-template/runtime-benchmarks',
     'pallet-timestamp/runtime-benchmarks',
     'sp-runtime/runtime-benchmarks',
     'storage-order/runtime-benchmarks',
@@ -57,9 +56,6 @@ std = [
     "frame-system-rpc-runtime-api/std",
     "frame-system/std",
     "pallet-election-provider-multi-phase/std",
-    "pallet-timestamp/std",
-    "pallet-transaction-payment-rpc-runtime-api/std",
-    "pallet-transaction-payment/std",
     "sp-transaction-pool/std",
     "sp-version/std",
     "sp-npos-elections/std",
@@ -68,38 +64,35 @@ std = [
     "pallet-utility/std",
     'codec/std',
     'frame-executive/std',
-    'frame-support/std',
     'frame-system-rpc-runtime-api/std',
     'frame-system/std',
     'pallet-balances/std',
     'pallet-grandpa/std',
     'pallet-randomness-collective-flip/std',
     'pallet-sudo/std',
-    'pallet-template/std',
-    'pallet-timestamp/std',
-    'pallet-transaction-payment-rpc-runtime-api/std',
-    'pallet-transaction-payment/std',
     'sp-api/std',
     'sp-block-builder/std',
     'sp-core/std',
     'sp-inherents/std',
     'sp-offchain/std',
     'sp-runtime/std',
-    'sp-session/std',
     'sp-std/std',
     'sp-transaction-pool/std',
     'sp-version/std',
     'storage-order/std',
     'storage-order-runtime-api/std',
     'worker/std',
-    'benefit/std',
+    'benefits/std',
     'worker-runtime-api/std',
     'primitives/std',
-    'payment/std'
+    'payment/std',
+    'sp-arithmetic/std',
+    "pallet-offences/std",
 ]
 
 [dependencies]
 pallet-staking = { path = "../pallets/staking", default-features = false, version = "3.0.0" }
+smallvec = "1.4.1"
 
 [dependencies.codec]
 default-features = false
@@ -179,10 +172,6 @@ git = 'https://gitee.com/mohaijiang/substrate.git'
 tag = 'monthly-2021-07'
 version = '3.0.0'
 
-[dependencies.pallet-template]
-default-features = false
-path = '../pallets/template'
-version = '3.0.0'
 
 [dependencies.payment]
 default-features = false
@@ -199,9 +188,9 @@ default-features = false
 path = '../pallets/storage-order/runtime-api'
 version = '3.0.0'
 
-[dependencies.benefit]
+[dependencies.benefits]
 default-features = false
-path = '../pallets/benefit'
+path = '../pallets/benefits'
 version = '3.0.0'
 
 [dependencies.worker]
@@ -310,8 +299,6 @@ git = 'https://gitee.com/mohaijiang/substrate.git'
 tag = 'monthly-2021-07'
 version = '3.0.0'
 
-sp-session = { default-features = false, version = "3.0.0" }
-
 
 [dependencies.pallet-session]
 default-features = false
@@ -381,6 +368,12 @@ tag = 'monthly-2021-07'
 version = '3.0.0'
 
 [dependencies.pallet-utility]
+default-features = false
+git = 'https://gitee.com/mohaijiang/substrate.git'
+tag = 'monthly-2021-07'
+version = '3.0.0'
+
+[dependencies.sp-arithmetic]
 default-features = false
 git = 'https://gitee.com/mohaijiang/substrate.git'
 tag = 'monthly-2021-07'

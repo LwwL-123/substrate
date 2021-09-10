@@ -37,7 +37,7 @@
 //! - Staking: The process of locking up funds for some time, placing them at risk of slashing
 //!   (loss) in order to become a rewarded maintainer of the network.
 //! - Validating: The process of running a node to actively maintain the network, either by
-//!   producing blocks or guaranteeing finality of the chain.
+//!   producing blocks or nominationsing finality of the chain.
 //! - Nominating: The process of placing staked funds behind one or more validators in order to
 //!   share in any reward, and punishment, they take.
 //! - Stash account: The account holding an owner's funds used for staking.
@@ -300,7 +300,6 @@ use frame_support::{
 use pallet_session::historical;
 use sp_runtime::{
 	Percent, Perbill, Permill, RuntimeDebug,
-	curve::PiecewiseLinear,
 	traits::{
 		Convert, Zero, StaticLookup, CheckedSub, Saturating, SaturatedConversion,
 		AtLeast32BitUnsigned,One,CheckedAdd
@@ -316,16 +315,19 @@ use frame_system::{
 };
 pub use weights::WeightInfo;
 pub use pallet::*;
-use primitives::constants::{
-	time::*,
-	currency::*,
-	staking::*,
+use primitives::{
+	constants::{
+		time::*,
+		currency::*,
+		staking::*,
+	},
+	p_benefit::BenefitInterface
 };
 pub mod total_stake_limit_ratio;
 use total_stake_limit_ratio::total_stake_limit_ratio;
 
 const STAKING_ID: LockIdentifier = *b"staking ";
-const MAX_GUARANTEE: usize = 16;
+const MAX_NOMINATIONS: usize = 16;
 
 pub(crate) const LOG_TARGET: &'static str = "runtime::staking";
 
@@ -367,7 +369,7 @@ pub struct ActiveEraInfo {
 	/// Moment of start expressed as millisecond from `$UNIX_EPOCH`.
 	///
 	/// Start can be none if start hasn't been set for the era yet,
-	/// Start is set on the first on_finalize of the era to guarantee usage of `Time`.
+	/// Start is set on the first on_finalize of the era to nominations usage of `Time`.
 	start: Option<u64>,
 }
 
@@ -508,6 +510,7 @@ impl<
 				let diff = value - unlocking_balance;
 
 				unlocking_balance += diff;
+				unlocking_balance += diff;
 				self.active += diff;
 				last.value -= diff;
 			}
@@ -582,7 +585,7 @@ impl<AccountId, Balance> StakingLedger<AccountId, Balance> where
 pub struct Nominations<AccountId, Balance: HasCompact> {
 	/// The targets of nomination.
 	pub targets: Vec<IndividualExposure<AccountId, Balance>>,
-	/// The total votes of guarantee.
+	/// The total votes of nominations.
 	pub total: Balance,
 	/// The era the nominations were submitted.
 	///
@@ -673,54 +676,6 @@ impl<T: Config> SessionInterface<<T as frame_system::Config>::AccountId> for T w
 	}
 }
 
-///无
-/// Handler for determining how much of a balance should be paid out on the current era.
-pub trait EraPayout<Balance> {
-	/// Determine the payout for this era.
-	///
-	/// Returns the amount to be paid to stakers in this era, as well as whatever else should be
-	/// paid out ("the rest").
-	fn era_payout(
-		total_staked: Balance,
-		total_issuance: Balance,
-		era_duration_millis: u64,
-	) -> (Balance, Balance);
-}
-
-impl<Balance: Default> EraPayout<Balance> for () {
-	fn era_payout(
-		_total_staked: Balance,
-		_total_issuance: Balance,
-		_era_duration_millis: u64,
-	) -> (Balance, Balance) {
-		(Default::default(), Default::default())
-	}
-}
-
-///无
-/// Adaptor to turn a `PiecewiseLinear` curve definition into an `EraPayout` impl, used for
-/// backwards compatibility.
-pub struct ConvertCurve<T>(sp_std::marker::PhantomData<T>);
-impl<
-	Balance: AtLeast32BitUnsigned + Clone,
-	T: Get<&'static PiecewiseLinear<'static>>,
-> EraPayout<Balance> for ConvertCurve<T> {
-	fn era_payout(
-		total_staked: Balance,
-		total_issuance: Balance,
-		era_duration_millis: u64,
-	) -> (Balance, Balance) {
-		let (validator_payout, max_payout) = inflation::compute_total_payout(
-			&T::get(),
-			total_staked,
-			total_issuance,
-			// Duration of era; more than u64::MAX is rewarded as u64::MAX.
-			era_duration_millis,
-		);
-		let rest = max_payout.saturating_sub(validator_payout.clone());
-		(validator_payout, rest)
-	}
-}
 
 /// Mode of era-forcing.
 #[derive(Copy, Clone, PartialEq, Eq, Encode, Decode, RuntimeDebug)]
@@ -853,7 +808,7 @@ pub mod pallet {
 
 		/// Time used for computing era duration.
 		///
-		/// It is guaranteed to start being called from the first `on_finalize`. Thus value at genesis
+		/// It is nominationsd to start being called from the first `on_finalize`. Thus value at genesis
 		/// is not used.
 		type UnixTime: UnixTime;
 
@@ -901,10 +856,6 @@ pub mod pallet {
 		/// Interface for interacting with a session pallet.
 		type SessionInterface: self::SessionInterface<Self::AccountId>;
 
-		/// The payout for validators and the system for the current era.
-		/// See [Era payout](./index.html#era-payout).
-		type EraPayout: EraPayout<BalanceOf<Self>>;
-
 		/// Something that can estimate the next session change, accurately or as a best effort guess.
 		type NextNewSession: EstimateNextNewSession<Self::BlockNumber>;
 
@@ -924,8 +875,11 @@ pub mod pallet {
 		// /// Reference to Market staking pot.
 		// type MarketStakingPot: MarketInterface<Self::AccountId, BalanceOf<Self>>;
 
-		 /// Market Staking Pot Duration. Count of EraIndex
-		 type MarketStakingPotDuration: Get<u32>;
+		/// Market Staking Pot Duration. Count of EraIndex
+		type MarketStakingPotDuration: Get<u32>;
+
+		/// Fee reduction interface
+		type BenefitInterface: BenefitInterface<Self::AccountId, BalanceOf<Self>, NegativeImbalanceOf<Self>>;
 
 	}
 
@@ -950,7 +904,7 @@ pub mod pallet {
 	///
 	/// Must be more than the number of eras delayed by session otherwise. I.e. active era must
 	/// always be in history. I.e. `active_era > current_era - history_depth` must be
-	/// guaranteed.
+	/// nominationsd.
 	#[pallet::storage]
 	#[pallet::getter(fn history_depth)]
 	pub(crate) type HistoryDepth<T> = StorageValue<_, u32, ValueQuery, HistoryDepthOnEmpty>;
@@ -1359,47 +1313,35 @@ pub mod pallet {
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	#[pallet::metadata(T::AccountId = "AccountId", BalanceOf<T> = "Balance")]
 	pub enum Event<T: Config> {
-		/// The era payout has been set; the first balance is the validator-payout; the second is
-		/// the remainder from the maximum amount of reward.
-		/// \[era_index, validator_payout, remainder\]
-		EraPayout(EraIndex, BalanceOf<T>, BalanceOf<T>),
-		/// The staker has been rewarded by this amount. \[stash, amount\]
+		/// 质押人获得奖励  \[stash, amount\]
 		Reward(T::AccountId, BalanceOf<T>),
-		/// One validator (and its nominators) has been slashed by the given amount.
+		/// 一名验证者（及其提名者）被惩罚了给定的金额
 		/// \[validator, amount\]
 		Slash(T::AccountId, BalanceOf<T>),
-		/// An old slashing report from a prior era was discarded because it could
-		/// not be processed. \[session_index\]
+		/// 前一个时代的旧惩罚报告因无法处理而被丢弃 \[session_index\]
 		OldSlashingReportDiscarded(SessionIndex),
-		/// A new set of stakers was elected.
-		StakingElection,
-		/// An account has bonded this amount. \[stash, amount\]
+		/// 账户被绑定了指定的金额 \[stash, amount\]
 		///
 		/// NOTE: This event is only emitted when funds are bonded via a dispatchable. Notably,
 		/// it will not be emitted for staking rewards when they are added to stake.
 		Bonded(T::AccountId, BalanceOf<T>),
-		/// An account has unbonded this amount. \[stash, amount\]
+		/// 一个帐户已解除绑定了此金额 \[stash, amount\]
 		Unbonded(T::AccountId, BalanceOf<T>),
-		/// An account has called `withdraw_unbonded` and removed unbonding chunks worth `Balance`
-		/// from the unlocking queue. \[stash, amount\]
+		/// 一个账户调用了 `withdraw_unbonded` 并从未解锁的块中，解绑了指定金额. \[stash, amount\]
 		Withdrawn(T::AccountId, BalanceOf<T>),
 		// /// A nominator has been kicked from a validator. \[nominator, stash\]
 		// Kicked(T::AccountId, T::AccountId),
-		/// The election failed. No new era is planned.
-		StakingElectionFailed,
-		/// Total reward at each era
+		/// 每个era的总奖励
 		EraReward(EraIndex, BalanceOf<T>, BalanceOf<T>),
-		/// Staking pot is not enough
-		NotEnoughCurrency(EraIndex, BalanceOf<T>, BalanceOf<T>),
-		/// An account has called `validate` and set guarantee fee.
+		/// 一个账户调用了“validate”申请成为验证人，并设置了保证金
 		ValidateSuccess(T::AccountId, ValidatorPrefs),
-		/// An account has called `guarantee` and vote for one validator.
-		GuaranteeSuccess(T::AccountId, T::AccountId, BalanceOf<T>),
-		/// An account has called `cut_guarantee` and cut vote for one validator.
-		CutGuaranteeSuccess(T::AccountId, T::AccountId, BalanceOf<T>),
-		/// An account has been chilled from its stash
+		/// 一个账户称为“nominations”并投票给一个验证者
+		NominationsSuccess(T::AccountId, T::AccountId, BalanceOf<T>),
+		/// 一个账户调用了 `cut_nominations` 并减少为一个验证者投票
+		CutNominationsSuccess(T::AccountId, T::AccountId, BalanceOf<T>),
+		/// 帐户冻结成功
 		ChillSuccess(T::AccountId, T::AccountId),
-		/// Update the identities success. The stake limit of each identity would be updated.
+		/// 更新质押上限成功
 		UpdateStakeLimitSuccess(u32),
 	}
 
@@ -1458,7 +1400,7 @@ pub mod pallet {
 		/// Can not bond with value less than minimum balance.
 		InsufficientValue,
 		/// Can not bond with more than limit
-		ExceedGuaranteeLimit,
+		ExceedNominationsLimit,
 	}
 
 	#[pallet::hooks]
@@ -1514,8 +1456,7 @@ pub mod pallet {
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		/// Take the origin account as a stash and lock up `value` of its balance. `controller` will
-		/// be the account that controls it.
+		/// 将原始帐户作为stash账户并锁定其金额. `controller` 将是控制它的帐户
 		///
 		/// `value` must be more than the `minimum_balance` specified by `T::Currency`.
 		///
@@ -1585,8 +1526,7 @@ pub mod pallet {
 			Ok(())
 		}
 
-		/// Add some extra amount that have appeared in the stash `free_balance` into the balance up
-		/// for staking.
+		/// 将一些已出现在 `free_balance` 中的额外金额添加到用于质押的金额中
 		///
 		/// Use this if there are additional funds in your stash account that you wish to bond.
 		/// Unlike [`bond`] or [`unbond`] this function does not impose any limitation on the amount
@@ -1630,6 +1570,7 @@ pub mod pallet {
 			Ok(())
 		}
 
+		/// 安排一部分stash解锁准备在绑定期结束后转出，如果这使主动绑定的金额少于 T::Currency::minimum_balance()，则将其增加到全额
 		/// Schedule a portion of the stash to be unlocked ready for transfer out after the bond
 		/// period ends. If this leaves an amount actively bonded less than
 		/// T::Currency::minimum_balance(), then it is increased to the full amount.
@@ -1706,6 +1647,7 @@ pub mod pallet {
 			Ok(())
 		}
 
+		/// 重新绑定计划解锁的stash部分
 		/// Rebond a portion of the stash scheduled to be unlocked.
 		///
 		/// The dispatch origin must be signed by the controller, and it can be only called when
@@ -1742,6 +1684,7 @@ pub mod pallet {
 			).into())
 		}
 
+		/// 从我们的管理队列 `unlocking` 中删除任何未锁定的块
 		/// Remove any unlocked chunks from the `unlocking` queue from our management.
 		///
 		/// This essentially frees up that balance to be used by the stash account to do
@@ -1814,6 +1757,7 @@ pub mod pallet {
 			Ok(post_info_weight.into())
 		}
 
+		/// 由controller账户声明想成为验证人
 		/// Declare the desire to validate for the origin controller.
 		///
 		/// Effects will be felt at the beginning of the next era.
@@ -1861,6 +1805,7 @@ pub mod pallet {
 			Ok(())
 		}
 
+		/// 由controller账户声明想成为提名人
 		/// Declare the desire to nominate `targets` for the origin controller.
 		///
 		/// Effects will be felt at the beginning of the next era. This can only be called when
@@ -1898,22 +1843,23 @@ pub mod pallet {
 			// 3. Votes value should greater than the dust
 			ensure!(votes > T::Currency::minimum_balance(), Error::<T>::InsufficientValue);
 
-			// 4. Upsert (increased) guarantee
-			let guarantee = Self::increase_guarantee(&v_stash, g_stash, ledger.active.clone(), votes.clone());
+			// 4. Upsert (increased) nominations
+			let nominations = Self::increase_nominations(&v_stash, g_stash, ledger.active.clone(), votes.clone());
 
-			// 5. `None` means exceed the guarantee limit(`MAX_GUARANTEE`)
-			ensure!(guarantee.is_some(), Error::<T>::ExceedGuaranteeLimit);
-			let guarantee = guarantee.unwrap();
+			// 5. `None` means exceed the nominations limit(`MAX_NOMINATIONS`)
+			ensure!(nominations.is_some(), Error::<T>::ExceedNominationsLimit);
+			let nominations = nominations.unwrap();
 
 			Self::do_remove_validator(g_stash);
-			Self::do_add_nominator(g_stash, guarantee);
-			Self::deposit_event(Event::<T>::GuaranteeSuccess(controller, v_stash, votes));
+			Self::do_add_nominator(g_stash, nominations);
+			Self::deposit_event(Event::<T>::NominationsSuccess(controller, v_stash, votes));
 
 			Ok(())
 
 		}
 
-		/// Declare the desire to cut guarantee for the origin controller.
+		/// 由controller账户声明想减少像提名的人
+		/// Declare the desire to cut nominations for the origin controller.
 		///
 		/// Effects will be felt at the beginning of the next era.
 		///
@@ -1921,12 +1867,12 @@ pub mod pallet {
 		///
 		/// # <weight>
 		/// - The transaction's complexity is proportional to the size of `validators` (N),
-		/// `guarantors`, `guarantee_rel`
+		/// `nominators`, `nominations_rel`
 		/// - Both the reads and writes follow a similar pattern.
 		/// ---------
 		/// DB Weight:
-		/// - Reads: Guarantors, Ledger, Current Era
-		/// - Writes: Validators, Guarantors
+		/// - Reads: Nominators, Ledger, Current Era
+		/// - Writes: Validators, Nominators
 		/// # </weight>
 		#[pallet::weight(0)]
 		pub fn cut_nominations(origin: OriginFor<T>, target: (<T::Lookup as StaticLookup>::Source, BalanceOf<T>))-> DispatchResult {
@@ -1942,20 +1888,21 @@ pub mod pallet {
 			// 3. Votes value should greater than the dust
 			ensure!(votes > T::Currency::minimum_balance(), Error::<T>::InsufficientValue);
 
-			// 4. Upsert (decreased) guarantee
-			let guarantee = Self::decrease_guarantee(&v_stash, &g_stash, votes.clone());
+			// 4. Upsert (decreased) nominations
+			let nominations = Self::decrease_nominations(&v_stash, &g_stash, votes.clone());
 
 			// 5. `None` means the target is invalid(cut a void)
-			ensure!(guarantee.is_some(), Error::<T>::InvalidTarget);
-			let guarantee = guarantee.unwrap();
+			ensure!(nominations.is_some(), Error::<T>::InvalidTarget);
+			let nominations = nominations.unwrap();
 
-			Self::do_add_nominator(g_stash, guarantee);
-			Self::deposit_event(Event::<T>::CutGuaranteeSuccess(controller, v_stash, votes));
+			Self::do_add_nominator(g_stash, nominations);
+			Self::deposit_event(Event::<T>::CutNominationsSuccess(controller, v_stash, votes));
 
 			Ok(())
 
 		}
 
+		/// 声明不想成为验证人与提名人
 		/// Declare no desire to either validate or nominate.
 		///
 		/// Effects will be felt at the beginning of the next era.
@@ -1983,7 +1930,8 @@ pub mod pallet {
 			Ok(())
 		}
 
-		/// (Re-)set the payment target for a controller.
+		/// （重新）重新设置获取收益的账户
+		/// (Re-)set the payment target for a controller
 		///
 		/// Effects will be felt at the beginning of the next era.
 		///
@@ -2011,6 +1959,7 @@ pub mod pallet {
 			Ok(())
 		}
 
+		///（重新）设置stash账户的controller账户
 		/// (Re-)set the controller of a stash.
 		///
 		/// Effects will be felt at the beginning of the next era.
@@ -2047,7 +1996,7 @@ pub mod pallet {
 			Ok(())
 		}
 
-		/// Sets the ideal number of validators.
+		/// 设置最大验证人数量
 		///
 		/// The dispatch origin must be Root.
 		///
@@ -2065,7 +2014,7 @@ pub mod pallet {
 			Ok(())
 		}
 
-		/// Increments the ideal number of validators.
+		/// 增加最大验证人数量
 		///
 		/// The dispatch origin must be Root.
 		///
@@ -2082,6 +2031,7 @@ pub mod pallet {
 			Ok(())
 		}
 
+		/// 将最大的验证人数量扩大一个因子
 		/// Scale up the ideal number of validators by a factor.
 		///
 		/// The dispatch origin must be Root.
@@ -2096,6 +2046,7 @@ pub mod pallet {
 			Ok(())
 		}
 
+		/// 强制永远不产生新era
 		/// Force there to be no new eras indefinitely.
 		///
 		/// The dispatch origin must be Root.
@@ -2118,6 +2069,7 @@ pub mod pallet {
 			Ok(())
 		}
 
+		/// 在下个session结束时进入一个新era。在此之后，它将被重置为正常行为
 		/// Force there to be a new era at the end of the next session. After this, it will be
 		/// reset to normal (non-forced) behaviour.
 		///
@@ -2141,7 +2093,7 @@ pub mod pallet {
 			Ok(())
 		}
 
-		/// Set the validators who cannot be slashed (if any).
+		/// 设置不能被惩罚的验证人
 		///
 		/// The dispatch origin must be Root.
 		///
@@ -2159,6 +2111,7 @@ pub mod pallet {
 			Ok(())
 		}
 
+		/// 立即强制当前的质押者完全取消质押
 		/// Force a current staker to become completely unstaked, immediately.
 		///
 		/// The dispatch origin must be Root.
@@ -2185,7 +2138,7 @@ pub mod pallet {
 			Ok(())
 		}
 
-		/// Force there to be a new era at the end of sessions indefinitely.
+		/// 永远在下个session结束时进入一个新era
 		///
 		/// The dispatch origin must be Root.
 		///
@@ -2206,6 +2159,7 @@ pub mod pallet {
 			Ok(())
 		}
 
+		/// 取消延迟的惩罚
 		/// Cancel enactment of a deferred slash.
 		///
 		/// Can be called by the `T::SlashCancelOrigin`.
@@ -2243,6 +2197,7 @@ pub mod pallet {
 			Ok(())
 		}
 
+		/// 在一个单独的era，支付一个验证人和他的所有提名人的奖励
 		/// Pay out all the stakers behind a single validator for a single era.
 		///
 		/// - `validator_stash` is the stash account of the validator. Their nominators, up to
@@ -2282,6 +2237,7 @@ pub mod pallet {
 		}
 
 
+		/// 设置“HistoryDe​​pth”值。当`HistoryDe​​pth`减少时，该函数将删除任何历史信息
 		/// Set `HistoryDepth` value. This function will delete any history information
 		/// when `HistoryDepth` is reduced.
 		///
@@ -2322,6 +2278,7 @@ pub mod pallet {
 			Ok(())
 		}
 
+		/// 一旦其余额达到最低限度，就删除所有与该质押人有关的数据
 		/// Remove all data structure concerning a staker/stash once its balance is at the minimum.
 		/// This is essentially equivalent to `withdraw_unbonded` except it can be called by anyone
 		/// and the target `stash` must have no funds left beyond the ED.
@@ -2350,106 +2307,8 @@ pub mod pallet {
 			Ok(())
 		}
 
-
-		/// Update the various staking limits this pallet.
-		///
-		/// * `min_nominator_bond`: The minimum active bond needed to be a nominator.
-		/// * `min_validator_bond`: The minimum active bond needed to be a validator.
-		/// * `max_nominator_count`: The max number of users who can be a nominator at once.
-		///   When set to `None`, no limit is enforced.
-		/// * `max_validator_count`: The max number of users who can be a validator at once.
-		///   When set to `None`, no limit is enforced.
-		///
-		/// Origin must be Root to call this function.
-		///
-		/// NOTE: Existing nominators and validators will not be affected by this update.
-		/// to kick people under the new limits, `chill_other` should be called.
-		#[pallet::weight(T::WeightInfo::set_staking_limits())]
-		pub fn set_staking_limits(
-			origin: OriginFor<T>,
-			min_nominator_bond: BalanceOf<T>,
-			min_validator_bond: BalanceOf<T>,
-			max_nominator_count: Option<u32>,
-			max_validator_count: Option<u32>,
-			threshold: Option<Percent>,
-		) -> DispatchResult {
-			ensure_root(origin)?;
-			MinNominatorBond::<T>::set(min_nominator_bond);
-			MinValidatorBond::<T>::set(min_validator_bond);
-			MaxNominatorsCount::<T>::set(max_nominator_count);
-			MaxValidatorsCount::<T>::set(max_validator_count);
-			ChillThreshold::<T>::set(threshold);
-			Ok(())
-		}
-
-		/// Declare a `controller` to stop participating as either a validator or nominator.
-		///
-		/// Effects will be felt at the beginning of the next era.
-		///
-		/// The dispatch origin for this call must be _Signed_, but can be called by anyone.
-		///
-		/// If the caller is the same as the controller being targeted, then no further checks are
-		/// enforced, and this function behaves just like `chill`.
-		///
-		/// If the caller is different than the controller being targeted, the following conditions
-		/// must be met:
-		/// * A `ChillThreshold` must be set and checked which defines how close to the max
-		///   nominators or validators we must reach before users can start chilling one-another.
-		/// * A `MaxNominatorCount` and `MaxValidatorCount` must be set which is used to determine
-		///   how close we are to the threshold.
-		/// * A `MinNominatorBond` and `MinValidatorBond` must be set and checked, which determines
-		///   if this is a person that should be chilled because they have not met the threshold
-		///   bond required.
-		///
-		/// This can be helpful if bond requirements are updated, and we need to remove old users
-		/// who do not satisfy these requirements.
-		///
-		// TODO: Maybe we can deprecate `chill` in the future.
-		// https://github.com/paritytech/substrate/issues/9111
-		#[pallet::weight(T::WeightInfo::chill_other())]
-		pub fn chill_other(
-			origin: OriginFor<T>,
-			controller: T::AccountId,
-		) -> DispatchResult {
-			// Anyone can call this function.
-			let caller = ensure_signed(origin)?;
-			let ledger = Self::ledger(&controller).ok_or(Error::<T>::NotController)?;
-			let stash = ledger.stash;
-
-			// In order for one user to chill another user, the following conditions must be met:
-			// * A `ChillThreshold` is set which defines how close to the max nominators or
-			//   validators we must reach before users can start chilling one-another.
-			// * A `MaxNominatorCount` and `MaxValidatorCount` which is used to determine how close
-			//   we are to the threshold.
-			// * A `MinNominatorBond` and `MinValidatorBond` which is the final condition checked to
-			//   determine this is a person that should be chilled because they have not met the
-			//   threshold bond required.
-			//
-			// Otherwise, if caller is the same as the controller, this is just like `chill`.
-			if caller != controller {
-				let threshold = ChillThreshold::<T>::get().ok_or(Error::<T>::CannotChillOther)?;
-				let min_active_bond = if Nominators::<T>::contains_key(&stash) {
-					let max_nominator_count = MaxNominatorsCount::<T>::get().ok_or(Error::<T>::CannotChillOther)?;
-					let current_nominator_count = CounterForNominators::<T>::get();
-					ensure!(threshold * max_nominator_count < current_nominator_count, Error::<T>::CannotChillOther);
-					MinNominatorBond::<T>::get()
-				} else if Validators::<T>::contains_key(&stash) {
-					let max_validator_count = MaxValidatorsCount::<T>::get().ok_or(Error::<T>::CannotChillOther)?;
-					let current_validator_count = CounterForValidators::<T>::get();
-					ensure!(threshold * max_validator_count < current_validator_count, Error::<T>::CannotChillOther);
-					MinValidatorBond::<T>::get()
-				} else {
-					Zero::zero()
-				};
-
-				ensure!(ledger.active < min_active_bond, Error::<T>::CannotChillOther);
-			}
-
-			Self::chill_stash(&stash);
-			Ok(())
-		}
-
-		// TODO: Remove it after the main net reward start
+		/// 开启奖励的纪元
+		// TODO: 主网奖励开始后移除
 		#[pallet::weight(0)]
 		pub fn set_start_reward_era(origin: OriginFor<T>, start_reward_era: EraIndex) -> DispatchResult{
 			ensure_root(origin)?;
@@ -2466,29 +2325,29 @@ impl<T: Config> Pallet<T> {
 		Self::bonded(stash).and_then(Self::ledger).map(|l| l.active).unwrap_or_default()
 	}
 
-	/// Get the updated (increased) guarantee relationship
+	/// Get the updated (increased) nominations relationship
 	/// Basically, this function construct an updated edge or insert a new edge,
-	/// then returns the updated `Guarantee`
+	/// then returns the updated `Nominations`
 	///
 	/// # <weight>
 	/// - Independent of the arguments. Insignificant complexity.
 	/// - O(1).
 	/// - 1 DB entry.
 	/// # </weight>
-	fn increase_guarantee(
+	fn increase_nominations(
 		v_stash: &T::AccountId,
 		g_stash: &T::AccountId,
 		bonded: BalanceOf<T>,
 		votes: BalanceOf<T>
 	) -> Option<Nominations<T::AccountId, BalanceOf<T>>> {
-		// 1. Already guaranteed
-		if let Some(guarantee) = Self::nominators(g_stash) {
+		// 1. Already nominationsd
+		if let Some(nominations) = Self::nominators(g_stash) {
 			//剩余 = 所有活跃的绑定金额-所有担保的金额
 			//真实的担保 = 最小值（剩余，担保）
 			//新的所有的担保金额 = 原来的 + 真实的担保
-			let remains = bonded.saturating_sub(guarantee.total);
+			let remains = bonded.saturating_sub(nominations.total);
 			let real_votes = remains.min(votes);
-			let new_total = guarantee.total.saturating_add(real_votes);
+			let new_total = nominations.total.saturating_add(real_votes);
 			let mut new_targets: Vec<IndividualExposure<T::AccountId, BalanceOf<T>>> = vec![];
 			let mut update = false;
 
@@ -2502,8 +2361,8 @@ impl<T: Config> Pallet<T> {
 			}
 
 			// Fill in `new_targets`, always LOOP the `targets`
-			// However, the TC is O(1) due to the `MAX_GUARANTEE` restriction 🤪
-			for mut target in guarantee.targets {
+			// However, the TC is O(1) due to the `MAX_NOMINATIONS` restriction 🤪
+			for mut target in nominations.targets {
 				// a. Update an edge
 				if &target.who == v_stash {
 					target.value += real_votes;
@@ -2513,7 +2372,7 @@ impl<T: Config> Pallet<T> {
 			}
 
 			if !update {
-				if new_targets.len() >= MAX_GUARANTEE {
+				if new_targets.len() >= MAX_NOMINATIONS {
 					return None
 				} else {
 					// b. New an edge
@@ -2531,7 +2390,7 @@ impl<T: Config> Pallet<T> {
 				suppressed: false,
 			})
 
-			// 2. New guarantee
+			// 2. New nominations
 		} else {
 			let real_votes = bonded.min(votes);
 			let new_total = real_votes;
@@ -2554,21 +2413,21 @@ impl<T: Config> Pallet<T> {
 	}
 
 
-	/// Get the updated (decreased) guarantee relationship
+	/// Get the updated (decreased) nominations relationship
 	/// Basically, this function construct an updated edge,
-	/// then returns the updated `Guarantee`
+	/// then returns the updated `Nominations`
 	///
 	/// # <weight>
 	/// - Independent of the arguments. Insignificant complexity.
 	/// - O(1).
 	/// - 1 DB entry.
 	/// # </weight>
-	fn decrease_guarantee(
+	fn decrease_nominations(
 		v_stash: &T::AccountId,
 		g_stash: &T::AccountId,
 		votes: BalanceOf<T>,
 	) -> Option<Nominations<T::AccountId, BalanceOf<T>>> {
-		if let Some(guarantee) = Self::nominators(g_stash) {
+		if let Some(nominations) = Self::nominators(g_stash) {
 			// `decreased_votes` = min(votes, target.value)
 			// `new_targets` means the targets after decreased
 			// `exists` means the targets contains `v_stash`
@@ -2577,8 +2436,8 @@ impl<T: Config> Pallet<T> {
 			let mut exists = false;
 
 			// Always LOOP the targets
-			// However, the TC is O(1), due to the `MAX_GUARANTEE` restriction 🤪
-			for target in guarantee.targets {
+			// However, the TC is O(1), due to the `MAX_NOMINATIONS` restriction 🤪
+			for target in nominations.targets {
 				if &target.who == v_stash {
 					// 1. Mark it really exists (BRAVO), and update the decreased votes
 					exists = true;
@@ -2602,14 +2461,14 @@ impl<T: Config> Pallet<T> {
 
 			if exists  {
 				// 5. Update `new_total` with saturating sub the decreased_votes
-				let new_total = guarantee.total.saturating_sub(decreased_votes);
+				let new_total = nominations.total.saturating_sub(decreased_votes);
 
 				// TODO: `submitted_in` and `suppressed` should not be change?
 				return Some(Nominations {
 					targets: new_targets.clone(),
 					total: new_total,
-					submitted_in: guarantee.submitted_in,
-					suppressed: guarantee.suppressed
+					submitted_in: nominations.submitted_in,
+					suppressed: nominations.suppressed
 				})
 			}
 		}
@@ -2721,24 +2580,24 @@ impl<T: Config> Pallet<T> {
 		total_reward = total_reward.saturating_add(staking_reward);
 		let total = exposure.total.max(One::one());
 		// 4. 计算所有担保人的总奖励 = 验证人设置的担保费率*总奖励
-		let estimated_guarantee_rewards = <ErasValidatorPrefs<T>>::get(&era, &ledger.stash).commission * total_reward;
-		let mut guarantee_rewards = Zero::zero();
+		let estimated_nominations_rewards = <ErasValidatorPrefs<T>>::get(&era, &ledger.stash).commission * total_reward;
+		let mut nominations_rewards = Zero::zero();
 		// 5. 支付给所有担保人
 		for i in &exposure.others {
 			// 奖励的比例 = 担保人质押的金额/此验证人的总质押
 			let reward_ratio = Perbill::from_rational(i.value, total);
 			// 所有担保人的奖励总数 = 奖励的比例 * 担保人的奖励金额
-			guarantee_rewards += reward_ratio * estimated_guarantee_rewards;
+			nominations_rewards += reward_ratio * estimated_nominations_rewards;
 			// 依次付款
 			if let Some(imbalance) = Self::make_payout(
 				&i.who,
-				reward_ratio * estimated_guarantee_rewards
+				reward_ratio * estimated_nominations_rewards
 			) {
 				Self::deposit_event(Event::<T>::Reward(i.who.clone(), imbalance.peek()));
 			};
 		}
 		// 6. 支付奖励给验证人
-		validator_imbalance.maybe_subsume(Self::make_payout(&ledger.stash, total_reward - guarantee_rewards));
+		validator_imbalance.maybe_subsume(Self::make_payout(&ledger.stash, total_reward - nominations_rewards));
 		Self::deposit_event(Event::<T>::Reward(ledger.stash, validator_imbalance.peek()));
 		Ok(())
 	}
@@ -2817,7 +2676,7 @@ impl<T: Config> Pallet<T> {
 			let new_index = active_era.as_ref().map(|info| info.index + 1).unwrap_or(0);
 			*active_era = Some(ActiveEraInfo {
 				index: new_index,
-				// Set new active era start in next `on_finalize`. To guarantee usage of `Time`
+				// Set new active era start in next `on_finalize`. To nominations usage of `Time`
 				start: None,
 			});
 			new_index
@@ -2878,12 +2737,11 @@ impl<T: Config> Pallet<T> {
 				// 1. 计算市场支出
 				let market_total_payout = Self::calculate_market_payout(active_era_index);
 				// 总支出 = gpos支出 + 市场支出
-				let total_payout = market_total_payout.saturating_add(gpos_total_payout);
+				let mut total_payout = market_total_payout.saturating_add(gpos_total_payout);
 
 				// 2. 减少上一次减费并更新下一次总减费
-				//? TODO:BenefitInterface降费接口，获取降费
-				//let used_fee = T::BenefitInterface::update_era_benefit(active_era_index + 1, total_payout);
-				//total_payout = total_payout.saturating_sub(used_fee);
+				let used_fee = T::BenefitInterface::update_era_benefit(active_era_index + 1, total_payout);
+				total_payout = total_payout.saturating_sub(used_fee);
 
 				// 3. 拆分质押和验证的奖励
 				// 获取当前验证人的人数
@@ -3069,7 +2927,7 @@ impl<T: Config> Pallet<T> {
 		let to_balance = |e: u128| <T::CurrencyToVote as Convert<u128, BalanceOf<T>>>::convert(e);
 
 		// II. 构建并添加 V/G graph
-		// TC is O(V + G*1), V means validator's number, G means guarantor's number
+		// TC is O(V + G*1), V means validator's number, G means nominator's number
 		// DB try is 2
 
 		log!(
@@ -3084,8 +2942,8 @@ impl<T: Config> Pallet<T> {
 			).collect();
 
 		//遍历所有担保人
-		for (guarantor, guarantee) in <Nominators<T>>::iter() {
-			let Nominations { total: _, submitted_in, mut targets, suppressed: _ } = guarantee;
+		for (nominator, nominations) in <Nominators<T>>::iter() {
+			let Nominations { total: _, submitted_in, mut targets, suppressed: _ } = nominations;
 			//过滤掉担保人在最后一次惩罚发生前的担保目标
 			targets.retain(|ie| {
 				<Self as Store>::SlashingSpans::get(&ie.who).map_or(
@@ -3098,7 +2956,7 @@ impl<T: Config> Pallet<T> {
 			for target in targets {
 				if let Some(g) = vg_graph.get_mut(&target.who) {
 					g.push(IndividualExposure {
-						who: guarantor.clone(),
+						who: nominator.clone(),
 						value: target.value
 					});
 				}
@@ -3367,7 +3225,7 @@ impl<T: Config> Pallet<T> {
 	//
 	//     // we'll need a random seed here.
 	//     let seed = T::Randomness::random(seed.as_slice());
-	//     // seed needs to be guaranteed to be 32 bytes.
+	//     // seed needs to be nominationsd to be 32 bytes.
 	//     let seed = <[u8; 32]>::decode(&mut TrailingZeroInput::new(seed.as_ref()))
 	//         .expect("input is padded with zeroes; qed");
 	//     let mut rng = ChaChaRng::from_seed(seed);

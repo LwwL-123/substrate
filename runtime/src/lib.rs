@@ -2,7 +2,7 @@
 // `construct_runtime!` does a lot of recursion and requires us to increase the limit to 256.
 #![recursion_limit="256"]
 
-// Make the WASM binary available.
+mod impls;// Make the WASM binary available.
 #[cfg(feature = "std")]
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
@@ -11,10 +11,10 @@ use sp_core::{
 	crypto::KeyTypeId,
 	OpaqueMetadata,
 };
-use sp_runtime::{ApplyExtrinsicResult, generic, create_runtime_str, impl_opaque_keys, transaction_validity::{TransactionValidity, TransactionSource, TransactionPriority}, SaturatedConversion};
+use sp_runtime::{Perquintill, FixedPointNumber, ApplyExtrinsicResult, generic, create_runtime_str, impl_opaque_keys, transaction_validity::{TransactionValidity, TransactionSource, TransactionPriority}};
 use sp_runtime::traits::{
 	BlakeTwo256, Block as BlockT, AccountIdLookup, NumberFor, ConvertInto,
-	OpaqueKeys,Convert,
+	OpaqueKeys,
 };
 use sp_api::impl_runtime_apis;
 use sp_consensus_babe;
@@ -42,7 +42,7 @@ pub use frame_support::{
 	},
 	debug,RuntimeDebug,
 };
-use pallet_transaction_payment::CurrencyAdapter;
+pub use pallet_transaction_payment::{Multiplier, TargetedFeeAdjustment, FeeDetails, OnChargeTransaction};
 use sp_runtime::curve::PiecewiseLinear;
 use pallet_session::{historical as pallet_session_historical};
 pub use pallet_staking::StakerStatus;
@@ -52,6 +52,9 @@ use frame_system::{
 };
 use sp_authority_discovery::AuthorityId as AuthorityDiscoveryId;
 
+/// Implementations of some helper traits passed into runtime modules as associated types.
+use impls::{CurrencyToVoteHandler, Author, OneTenthFee, CurrencyAdapter};
+
 /// 引用元数据
 pub use primitives::{
 	p_storage_order::OrderPage,
@@ -59,6 +62,32 @@ pub use primitives::{
 	constants::{time::*,currency::*},
 	*
 };
+
+/// Simple structure that exposes how u64 currency can be represented as... u64.
+pub struct CurrencyToVoteHandler;
+
+impl Convert<u64, u64> for CurrencyToVoteHandler {
+	fn convert(x: u64) -> u64 {
+		x
+	}
+}
+impl Convert<u128, u128> for CurrencyToVoteHandler {
+	fn convert(x: u128) -> u128 {
+		x
+	}
+}
+impl Convert<u128, u64> for CurrencyToVoteHandler {
+	fn convert(x: u128) -> u64 {
+		x.saturated_into()
+	}
+}
+
+impl Convert<u64, u128> for CurrencyToVoteHandler {
+	fn convert(x: u64) -> u128 {
+		x as u128
+	}
+}
+
 
 /// Opaque types. These are used by the CLI to instantiate machinery that don't need to know
 /// the specifics of the runtime. They can then be made to be agnostic over specific formats
@@ -125,6 +154,7 @@ pub fn native_version() -> NativeVersion {
 
 parameter_types! {
 	pub const BlockHashCount: BlockNumber = 2400;
+	pub const MaximumBlockWeight: Weight = 2 * WEIGHT_PER_SECOND;
 	pub const Version: RuntimeVersion = VERSION;
 	pub RuntimeBlockLength: BlockLength =
 		BlockLength::max_with_normal_ratio(5 * 1024 * 1024, NORMAL_DISPATCH_RATIO);
@@ -221,6 +251,8 @@ pub const BABE_GENESIS_EPOCH_CONFIG: sp_consensus_babe::BabeEpochConfiguration =
 parameter_types! {
     pub const EpochDuration: u64 = EPOCH_DURATION_IN_SLOTS;
     pub const ExpectedBlockTime: u64 = MILLISECS_PER_BLOCK;
+	pub const ReportLongevity: u64 =
+		BondingDuration::get() as u64 * SessionsPerEra::get() as u64 * EpochDuration::get();
 }
 
 impl pallet_babe::Config for Runtime {
@@ -240,7 +272,7 @@ impl pallet_babe::Config for Runtime {
 		pallet_babe::AuthorityId,
 	)>>::IdentificationTuple;
 
-	type HandleEquivocation = ();
+	type HandleEquivocation = pallet_babe::EquivocationHandler<Self::KeyOwnerIdentification, Offences, ReportLongevity>;
 
 	type WeightInfo = ();
 
@@ -260,9 +292,19 @@ impl pallet_grandpa::Config for Runtime {
 		GrandpaId,
 	)>>::IdentificationTuple;
 
-	type HandleEquivocation = ();
+	type HandleEquivocation = pallet_grandpa::EquivocationHandler<Self::KeyOwnerIdentification, Offences, ReportLongevity>;
 
 	type WeightInfo = ();
+}
+
+parameter_types! {
+    pub OffencesWeightSoftLimit: Weight = Perbill::from_percent(60) * MaximumBlockWeight::get();
+}
+
+impl pallet_offences::Config for Runtime {
+	type Event = Event;
+	type IdentificationTuple = pallet_session::historical::IdentificationTuple<Self>;
+	type OnOffenceHandler = Staking;
 }
 
 parameter_types! {
@@ -275,6 +317,25 @@ impl pallet_timestamp::Config for Runtime {
 	type OnTimestampSet = Babe;
 	type MinimumPeriod = MinimumPeriod;
 	type WeightInfo = pallet_timestamp::weights::SubstrateWeight<Runtime>;
+}
+
+type NegativeImbalance = <Balances as Currency<AccountId>>::NegativeImbalance;
+
+pub struct DealWithFees;
+impl OnUnbalanced<NegativeImbalance> for DealWithFees {
+	fn on_unbalanceds<B>(mut fees_then_tips: impl Iterator<Item=NegativeImbalance>) {
+		if let Some(fees) = fees_then_tips.next() {
+			// for fees, 80% to treasury, 20% to author
+			let mut split = fees.ration(80, 20);
+			if let Some(tips) = fees_then_tips.next() {
+				// for tips, if any, 80% to treasury, 20% to author (though this can be anything)
+				tips.ration_merge_into(80, 20, &mut split);
+			}
+			//todo 目前给国库的金额取消
+			//Treasury::on_unbalanced(split.0);
+			Author::on_unbalanced(split.1);
+		}
+	}
 }
 
 parameter_types! {
@@ -297,14 +358,18 @@ impl pallet_balances::Config for Runtime {
 }
 
 parameter_types! {
-	pub const TransactionByteFee: Balance = 1;
+    pub const TransactionByteFee: Balance = MILLICENTS / 100;
+	pub const TargetBlockFullness: Perquintill = Perquintill::from_percent(25);
+	pub AdjustmentVariable: Multiplier = Multiplier::saturating_from_rational(1, 100_000);
+	pub MinimumMultiplier: Multiplier = Multiplier::saturating_from_rational(1, 1_000_000_000u128);
 }
 
 impl pallet_transaction_payment::Config for Runtime {
-	type OnChargeTransaction = CurrencyAdapter<Balances, ()>;
+	type OnChargeTransaction = CurrencyAdapter<Balances, Benefits, DealWithFees>;
 	type TransactionByteFee = TransactionByteFee;
-	type WeightToFee = IdentityFee<Balance>;
-	type FeeMultiplierUpdate = ();
+	type WeightToFee = OneTenthFee<Balance>;
+	type FeeMultiplierUpdate =
+	TargetedFeeAdjustment<Self, TargetBlockFullness, AdjustmentVariable, MinimumMultiplier>;
 }
 
 impl pallet_sudo::Config for Runtime {
@@ -312,11 +377,6 @@ impl pallet_sudo::Config for Runtime {
 	type Call = Call;
 }
 
-/// Configure the pallet-template in pallets/template.
-impl pallet_template::Config for Runtime {
-	type Event = Event;
-	type Currency = Balances;
-}
 
 parameter_types! {
 	pub const UncleGenerations: BlockNumber = 5;
@@ -406,31 +466,6 @@ parameter_types! {
     pub const MarketStakingPotDuration: u32 = 60;
 }
 
-/// Simple structure that exposes how u64 currency can be represented as... u64.
-pub struct CurrencyToVoteHandler;
-
-impl Convert<u64, u64> for CurrencyToVoteHandler {
-	fn convert(x: u64) -> u64 {
-		x
-	}
-}
-impl Convert<u128, u128> for CurrencyToVoteHandler {
-	fn convert(x: u128) -> u128 {
-		x
-	}
-}
-impl Convert<u128, u64> for CurrencyToVoteHandler {
-	fn convert(x: u128) -> u64 {
-		x.saturated_into()
-	}
-}
-
-impl Convert<u64, u128> for CurrencyToVoteHandler {
-	fn convert(x: u64) -> u128 {
-		x as u128
-	}
-}
-
 /// staking Runtime config
 impl pallet_staking::Config for Runtime {
 	const MAX_NOMINATIONS: u32 = 30;
@@ -466,8 +501,6 @@ impl pallet_staking::Config for Runtime {
 	type SlashCancelOrigin = frame_system::EnsureRoot<Self::AccountId>;
 	//给session提供的接口
 	type SessionInterface = Self;
-	//每个周期的花费
-	type EraPayout = pallet_staking::ConvertCurve<RewardCurve>;
 	//准确估计下一个session的改变，或者做一个最好的猜测
 	type NextNewSession = Session;
 	//为每个验证者奖励的提名者的最大数目。
@@ -475,10 +508,10 @@ impl pallet_staking::Config for Runtime {
 	type MaxNominatorRewardedPerValidator = MaxNominatorRewardedPerValidator;
 	//权重信息
 	type WeightInfo = pallet_staking::weights::SubstrateWeight<Runtime>;
-
 	type SPowerRatio = ();
 	type MarketStakingPotDuration = MarketStakingPotDuration;
 	// type MarketStakingPot = ();
+	type BenefitInterface = Benefits;
 }
 
 
@@ -503,6 +536,18 @@ impl pallet_authority_discovery::Config for Runtime {}
 parameter_types! {
 	pub const OrderWaitingTime: BlockNumber = 30 * MINUTES;
 	pub const PerByteDayPrice: u64 = 10;
+	// 文件基础费用
+	pub const FileBaseInitFee: Balance = 0;
+	// 文件个数费用
+	pub const FilesCountInitPrice: Balance = 1 * MICRO;
+	// 文件每天价格费用 每MB每天费用
+	pub const FileSizeInitPrice: Balance = 10 * NANO;
+	// 存储参考比率. reported_files_size / total_capacity
+	pub const StorageReferenceRatio: (u128, u128) = (25, 100); // 25/100 = 25%
+	// 价格上升比率
+	pub StorageIncreaseRatio: Perbill = Perbill::from_rational(1u64, 100000);
+	// 价格下浮比率
+	pub StorageDecreaseRatio: Perbill = Perbill::from_rational(1u64, 100000);
 }
 
 /// storage order Runtime config
@@ -514,12 +559,21 @@ impl storage_order::Config for Runtime {
 	type BalanceToNumber = ConvertInto;
 	type BlockNumberToNumber = ConvertInto;
 	type PaymentInterface = Payment;
+
+	type FileBaseInitFee = FileBaseInitFee;
+	type FilesCountInitPrice = FilesCountInitPrice;
+	type FileSizeInitPrice = FileSizeInitPrice;
+	type StorageReferenceRatio = StorageReferenceRatio;
+	type StorageIncreaseRatio = StorageIncreaseRatio;
+	type StorageDecreaseRatio = StorageDecreaseRatio;
+	type WorkerInterface = Worker;
 }
 
 parameter_types! {
-	pub const ReportInterval: BlockNumber = 1 * DAYS;
+	// 工作量上报间隔
+	pub const ReportInterval: BlockNumber = 6 * HOURS;
 	//定义文件副本收益限额 eg：前10可获得奖励
-	pub const AverageIncomeLimit: u8 = 10;
+	pub const AverageIncomeLimit: u8 = 4;
 }
 
 /// worker Runtime config
@@ -530,10 +584,15 @@ impl worker::Config for Runtime {
 	type BalanceToNumber = ConvertInto;
 	type StorageOrderInterface = StorageOrder;
 	type AverageIncomeLimit = AverageIncomeLimit;
+	type Works = Staking;
 }
 
 parameter_types! {
-	pub const NumberOfIncomeMiner: usize = 10;
+	pub const NumberOfIncomeMiner: usize = 4;
+	//文件质押比率 72%
+	pub const StakingRatio: Perbill = Perbill::from_percent(72);
+    //文件存储比率 18%
+	pub const StorageRatio: Perbill = Perbill::from_percent(18);
 }
 
 /// Configure the payment in pallets/payment.
@@ -545,6 +604,9 @@ impl payment::Config for Runtime {
 	type Currency = Balances;
 	type StorageOrderInterface = StorageOrder;
 	type WorkerInterface = Worker;
+	type StakingRatio = StakingRatio;
+	type StorageRatio = StorageRatio;
+	type BenefitInterface = Benefits;
 }
 
 parameter_types! {
@@ -553,15 +615,15 @@ parameter_types! {
     pub const BenefitMarketCostRatio: Perbill = Perbill::one();
 }
 
-///  benefit Runtime config
-impl benefit::Config for Runtime {
+///  benefits Runtime config
+impl benefits::Config for Runtime {
 	type Event = Event;
 	type Currency = Balances;
 	type BenefitReportWorkCost = BenefitReportWorkCost;
 	type BenefitsLimitRatio = BenefitsLimitRatio;
 	type BenefitMarketCostRatio = BenefitMarketCostRatio;
 	type BondingDuration = BondingDuration;
-	type WeightInfo = benefit::weight::WeightInfo<Runtime>;
+	type WeightInfo = benefits::weight::WeightInfo<Runtime>;
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
@@ -598,6 +660,8 @@ construct_runtime!(
 		Grandpa: pallet_grandpa::{Pallet, Call, Storage, Config, Event},
 		//Substrate 的 core/authority-discovery 库使用了 Authority Discovery 模块来获取当前验证者集，获取本节点验证者ID，以及签署和验证与本节点与其他权威节点之间交换的消息。
 		AuthorityDiscovery: pallet_authority_discovery::{Pallet, Config},
+		//Offences惩罚模块
+        Offences: pallet_offences::{Pallet, Storage, Event},
 
 		//其他模块
 		//Sudo pallet用来授予某个账户 (称为 "sudo key") 权限去执行需要Root权限的交易函数，或者是指定一个新账户来替代掉原来的sudo key。
@@ -608,11 +672,10 @@ construct_runtime!(
 
 		//ttc-pallet
 		// Include the custom logic from the pallet-template in the runtime.
-		TemplateModule: pallet_template::{Pallet, Call, Storage, Event<T>},
 		StorageOrder: storage_order::{Pallet, Call, Storage, Event<T>},
 		Worker: worker::{Pallet, Call, Storage, Event<T>},
 		Payment: payment::{Pallet, Call, Storage, Event<T>},
-		Benefit: benefit::{Pallet, Call, Storage, Event<T>},
+		Benefits: benefits::{Pallet, Call, Storage, Event<T>},
 	}
 );
 

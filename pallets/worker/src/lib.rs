@@ -17,6 +17,8 @@ use primitives::p_storage_order::StorageOrderInterface;
 use primitives::p_storage_order::StorageOrderStatus;
 use primitives::p_worker::*;
 
+mod zk;
+
 type BalanceOf<T> = <<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
 
 
@@ -61,6 +63,9 @@ pub mod pallet {
 
 		/// 平均收益限额
 		type AverageIncomeLimit: Get<u8>;
+
+		/// 工作量证明上报接口
+		type Works: Works<Self::AccountId>;
 	}
 
 	/// 矿工个数
@@ -76,12 +81,12 @@ pub mod pallet {
 	/// 总存储
 	#[pallet::storage]
 	#[pallet::getter(fn total_storage)]
-	pub(super) type TotalStorage<T: Config> = StorageValue<_, u64, ValueQuery>;
+	pub(super) type TotalStorage<T: Config> = StorageValue<_, u128, ValueQuery>;
 
 	/// 已用存储
 	#[pallet::storage]
 	#[pallet::getter(fn used_storage)]
-	pub(super) type UsedStorage<T: Config> = StorageValue<_, u64, ValueQuery>;
+	pub(super) type UsedStorage<T: Config> = StorageValue<_, u128, ValueQuery>;
 
 	/// 矿工收益
 	#[pallet::storage]
@@ -91,12 +96,12 @@ pub mod pallet {
 	/// 矿工总存储
 	#[pallet::storage]
 	#[pallet::getter(fn miner_total_storage)]
-	pub(super) type MinerTotalStorage<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, u64, ValueQuery>;
+	pub(super) type MinerTotalStorage<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, u128, ValueQuery>;
 
 	/// 矿工已用存储
 	#[pallet::storage]
 	#[pallet::getter(fn miner_used_storage)]
-	pub(super) type MinerUsedStorage<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, u64, ValueQuery>;
+	pub(super) type MinerUsedStorage<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, u128, ValueQuery>;
 
 	/// 矿工订单数据
 	#[pallet::storage]
@@ -117,7 +122,6 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn miner_order_income)]
 	pub(super) type MinerOrderIncome<T: Config> = StorageDoubleMap<_, Twox64Concat, T::AccountId, Twox64Concat, u64, bool, ValueQuery>;
-
 
 	// Pallets use events to inform users when important changes are made.
 	// https://substrate.dev/docs/en/knowledgebase/runtime/events
@@ -141,8 +145,10 @@ pub mod pallet {
 			if (now % T::ReportInterval::get()).is_zero() {
 				//获得当前阶段
 				let block_number = now -  T::ReportInterval::get();
-				//当前阶段进行健康检查
-				Self::health_check(&block_number);
+				//当前阶段进行健康检查 进行工作量证明上报
+				let (workload_map,total_storage) = Self::health_check(&block_number);
+				//工作量证明上报
+				T::Works::report_works(workload_map,total_storage);
 				//发送健康检查事件
 				Self::deposit_event(Event::HealthCheck(block_number));
 			}
@@ -164,6 +170,10 @@ pub mod pallet {
 		AlreadyCallOrderFinish,
 		/// 订单不存在
 		OrderDoesNotExist,
+		/// 零知识证明无效
+		ProofInvalid,
+		/// 证明与订单不匹配
+		ProofNotMatchOrder,
 	}
 
 	// Dispatchable functions allows users to interact with the pallet and invoke state changes.
@@ -175,8 +185,8 @@ pub mod pallet {
 		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
 		pub fn register(
 			origin: OriginFor<T>,
-			total_storage: u64,
-			used_storage: u64
+			total_storage: u128,
+			used_storage: u128
 		) -> DispatchResult {
 			//判断是否签名正确
 			let who = ensure_signed(origin)?;
@@ -202,7 +212,9 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			miner: T::AccountId,
 			order_index: u64,
-			cid: Vec<u8>
+			cid: Vec<u8>,
+			public_input: Vec<u8>,
+			proof: Vec<u8>,
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
 			//校验是否为矿工
@@ -220,10 +232,16 @@ pub mod pallet {
 			//判断订单是否已经提交
 			let miners = MinerSetOfOrder::<T>::get(&order_index);
 			ensure!(!miners.contains(&miner), Error::<T>::AlreadyCallOrderFinish);
+
+			//验证零知识证明
+			let zk_validate = zk::poreq_validate(&proof,&public_input);
+			ensure!(zk_validate,Error::<T>::ProofInvalid);
+
 			//添加订单矿工信息
 			Self::add_miner_set_of_order(&order_index,miner.clone());
 			//添加订单副本
 			T::StorageOrderInterface::add_order_replication(&order_index);
+			T::StorageOrderInterface::update_storage_order_public_input(&order_index,public_input);
 			//存入矿工订单数据
 			let mut orders = MinerOrderSet::<T>::get(&miner);
 			orders.push(order_index);
@@ -237,8 +255,9 @@ pub mod pallet {
 		pub fn proof_of_spacetime(
 			origin: OriginFor<T>,
 			orders: Vec<u64>,
-			total_storage: u64,
-			used_storage: u64
+			proofs: Vec<Vec<u8>>,
+			total_storage: u128,
+			used_storage: u128
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
 			//获得当前阶段
@@ -246,6 +265,8 @@ pub mod pallet {
 			let block_number = <frame_system::Pallet<T>>::block_number();
 			//计算当前阶段
 			let block_number = block_number - (block_number % T::ReportInterval::get());
+			// 校验订单数与证明数匹配
+			ensure!(orders.len() == proofs.len(),Error::<T>::ProofNotMatchOrder);
 			//通过矿工查询订单列表
 			let miner_orders = MinerOrderSet::<T>::get(&who);
 			//判断订单列表是否为空
@@ -260,6 +281,20 @@ pub mod pallet {
 				//添加入矿工订单中
 				MinerOrderSet::<T>::insert(&who,orders.clone());
 			}else{
+
+				// 校验订单的时空证明
+				for index in 0..orders.len() {
+					let order_opt = T::StorageOrderInterface::get_storage_order(&orders[index]);
+					if order_opt.is_some() {
+						let proof = &proofs[index];
+						let order = order_opt.unwrap();
+
+						//验证零知识证明
+						let zk_validate = zk::poreq_validate(proof,&order.public_input);
+						ensure!(zk_validate,Error::<T>::ProofInvalid);
+					}
+				}
+
 				//订单过滤
 				let miner_orders = miner_orders.into_iter().filter(|index| {
 					let result = orders.contains(index);
@@ -271,6 +306,7 @@ pub mod pallet {
 					}
 					result
 				}).collect::<Vec<u64>>();
+
 				//修改矿工订单列表
 				MinerOrderSet::<T>::insert(&who,miner_orders);
 			}
@@ -288,7 +324,7 @@ pub mod pallet {
 impl<T: Config> Pallet<T> {
 
 	///更新个人存储
-	fn update_storage(account_id: &T::AccountId, total_storage: u64, used_storage: u64) {
+	fn update_storage(account_id: &T::AccountId, total_storage: u128, used_storage: u128) {
 		let old_miner_total_storage = MinerTotalStorage::<T>::get(account_id);
 		let old_miner_used_storage = MinerUsedStorage::<T>::get(account_id);
 		//添加矿工总存储
@@ -304,34 +340,43 @@ impl<T: Config> Pallet<T> {
 	}
 
 	///进行健康检查
-	fn health_check(block_number: &T::BlockNumber) {
+	fn health_check(block_number: &T::BlockNumber) -> (BTreeMap<T::AccountId, u128>, u128) {
+		//工作量上报数据
+		let mut workload_map = BTreeMap::<T::AccountId, u128>::new();
 		//查询当前矿工节点
-		let miners = Miners::<T>::get().into_iter().filter(|miner| {
-			let result = Report::<T>::contains_key(block_number, miner);
+		Miners::<T>::get().into_iter().for_each(|miner| {
+			let result = Report::<T>::contains_key(block_number, &miner);
 			//如果不存在
 			if !result {
 				//获得矿工订单列表
-				let orders = MinerOrderSet::<T>::get(miner);
+				let orders = MinerOrderSet::<T>::get(&miner);
 				//删除订单矿工信息
 				orders.into_iter().for_each(|order_index| {
 					//在订单矿工数据中删除该矿工
-					Self::sub_miner_set_of_order(&order_index,miner);
+					Self::sub_miner_set_of_order(&order_index,&miner);
 					//减掉订单信息副本
 					T::StorageOrderInterface::sub_order_replication(&order_index);
 				});
 				//删除矿工订单信息
-				MinerOrderSet::<T>::remove(miner);
+				MinerOrderSet::<T>::remove(&miner);
+				//删除矿工存储
+				MinerTotalStorage::<T>::remove(&miner);
+				MinerUsedStorage::<T>::remove(&miner);
+				workload_map.insert(miner.clone(), 0);
+			} else {
+				//添加工作量上报数据
+				let total_storage = MinerTotalStorage::<T>::get(&miner);
+				//todo 关于副本系数获得有效存储空间
+				workload_map.insert(miner.clone(), total_storage);
 			}
-			result
-		}).collect::<Vec<T::AccountId>>();
-		//维护矿工信息
-		Miners::<T>::put(miners);
+		});
 		//更新总存储
-		let total_storage = MinerTotalStorage::<T>::iter_values().sum::<u64>();
+		let total_storage = MinerTotalStorage::<T>::iter_values().sum::<u128>();
 		TotalStorage::<T>::put(total_storage);
 		//更新总使存储
-		let used_storage = MinerUsedStorage::<T>::iter_values().sum::<u64>();
+		let used_storage = MinerUsedStorage::<T>::iter_values().sum::<u128>();
 		UsedStorage::<T>::put(used_storage);
+		(workload_map,total_storage)
 	}
 
 	///添加订单矿工信息
@@ -402,7 +447,6 @@ impl<T: Config> Pallet<T> {
 		}
 		list
 	}
-
 }
 
 impl<T: Config> WorkerInterface for Pallet<T> {
@@ -425,5 +469,9 @@ impl<T: Config> WorkerInterface for Pallet<T> {
 				MinerIncome::<T>::insert(account_id,income);
 			}
 		}
+	}
+
+	fn get_total_and_used() -> (u128, u128) {
+		(Self::total_storage(), Self::used_storage())
 	}
 }

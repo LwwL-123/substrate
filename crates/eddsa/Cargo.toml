@@ -1,0 +1,11 @@
+[package]
+name = "eddsa"
+version = "0.1.0"
+authors = ["Patract <https://github.com/patractlabs>"]
+edition = "2018"
+
+[dependencies]
+once_cell = "1.7"
+tiny-keccak = { version = "2.0", features = ["fips202"] }
+
+zkp-u256 = { git = "https://github.com/patractlabs/OpenZKP", branch = "master", default-features = false }

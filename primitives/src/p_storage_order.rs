@@ -3,6 +3,17 @@ use serde::{Deserialize, Serialize};
 use codec::{Encode, Decode};
 use sp_std::vec::Vec;
 use sp_debug_derive::RuntimeDebug;
+use sp_std::vec;
+
+
+
+pub const BASE_FEE_UPDATE_SLOT: u32 = 600;
+pub const BASE_FEE_UPDATE_OFFSET: u32 = 22;
+
+pub const PRICE_UPDATE_SLOT: u32 = 300;
+pub const PRICE_UPDATE_OFFSET: u32 = 10;
+pub const FILES_COUNT_REFERENCE: u64 = 20_000_000; // 20_000_000 / 50_000_000 = 40%
+
 
 #[derive( Encode, Decode, RuntimeDebug, PartialEq, Eq, Copy, Clone)]
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
@@ -13,6 +24,8 @@ pub enum StorageOrderStatus {
     Finished,
     /// 已取消.
     Canceled,
+    /// 已清算
+    Cleared,
 }
 
 impl Default for StorageOrderStatus {
@@ -38,19 +51,21 @@ pub struct StorageOrder<AccountId, BlockNumber> {
     /// 存储期限
     pub storage_deadline: BlockNumber,
     /// 文件大小
-    pub file_size: u32,
+    pub file_size: u64,
     /// 块高
     pub block_number: BlockNumber,
     /// 订单状态
     pub status: StorageOrderStatus,
     /// 副本数
     pub replication: u32,
+    /// comm_d
+    pub public_input: Vec<u8>,
 }
 
 impl<AccountId, BlockNumber> StorageOrder<AccountId, BlockNumber> {
 
     pub fn new (index: u64, cid: Vec<u8>, account_id: AccountId, file_name: Vec<u8>,
-            price: u128, storage_deadline: BlockNumber, file_size: u32, block_number: BlockNumber) -> Self {
+            price: u128, storage_deadline: BlockNumber, file_size: u64, block_number: BlockNumber) -> Self {
         StorageOrder {
             index,
             cid,
@@ -62,6 +77,7 @@ impl<AccountId, BlockNumber> StorageOrder<AccountId, BlockNumber> {
             block_number,
             status: StorageOrderStatus::Pending,
             replication: 0,
+            public_input: vec![],
         }
     }
 }
@@ -98,8 +114,12 @@ pub trait StorageOrderInterface {
 
     /// 通过订单index获得存储订单信息
     fn get_storage_order(order_index: &u64) -> Option<StorageOrder<Self::AccountId,Self::BlockNumber>>;
+    /// 更新存储文件的public_input
+    fn update_storage_order_public_input(order_index: &u64,public_input: Vec<u8>);
     /// 添加订单副本
     fn add_order_replication(order_index: &u64);
     /// 减少订单副本
     fn sub_order_replication(order_index: &u64);
+    /// 更新订单状态为已清算
+    fn update_order_status_to_cleared(order_index: &u64);
 }

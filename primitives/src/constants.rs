@@ -42,6 +42,7 @@ pub mod currency {
     pub const MILLI: Balance = TTC / 1000;       //10^9
     pub const MICRO: Balance = MILLI / 1000;     //10^6
     pub const NANO: Balance = MICRO / 1000;      //10^3
+    pub const PICO: Balance = 1;                 //1
 
     // GPoS rewards in the first year
     pub const FIRST_YEAR_REWARDS: Balance = 5_000_000 * TTC;

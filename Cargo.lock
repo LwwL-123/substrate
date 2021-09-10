@@ -88,6 +88,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "739f4a8db6605981345c5654f3a85b056ce52f37a39d34da03f25bf2151ea16e"
 
 [[package]]
+name = "ahash"
+version = "0.7.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "43bb833f0bf979d8475d38fbf09ed3b8a55e1885fe93ad3f93239fc6a4f17b98"
+dependencies = [
+ "getrandom 0.2.3",
+ "once_cell",
+ "version_check",
+]
+
+[[package]]
 name = "aho-corasick"
 version = "0.7.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -127,6 +138,216 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "072df7202e63b127ab55acfe16ce97013d5b97bf160489336d3f1840fd78e99e"
 dependencies = [
  "num-traits",
+]
+
+[[package]]
+name = "ark-bls12-377"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dc41c02c0d18a226947ee9ee023b1d957bdb6a68fc22ac296722935a9fef423c"
+dependencies = [
+ "ark-ec",
+ "ark-ff",
+ "ark-std",
+]
+
+[[package]]
+name = "ark-bls12-381"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "65be532f9dd1e98ad0150b037276cde464c6f371059e6dd02c0222395761f6aa"
+dependencies = [
+ "ark-ec",
+ "ark-ff",
+ "ark-std",
+]
+
+[[package]]
+name = "ark-bn254"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ea691771ebbb28aea556c044e2e5c5227398d840cee0c34d4d20fa8eb2689e8c"
+dependencies = [
+ "ark-ec",
+ "ark-ff",
+ "ark-std",
+]
+
+[[package]]
+name = "ark-bw6-761"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5abb465edcdee2bec3eff283e43f1c2414d1a4f6eaeb8e3de02aba3695d0520b"
+dependencies = [
+ "ark-bls12-377",
+ "ark-ec",
+ "ark-ff",
+ "ark-std",
+]
+
+[[package]]
+name = "ark-cp6-782"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cb8b94a4e6f8912729377e6cbc67bee76315a3a696605f56fb4ace0a6479481d"
+dependencies = [
+ "ark-bls12-377",
+ "ark-ec",
+ "ark-ff",
+ "ark-std",
+]
+
+[[package]]
+name = "ark-crypto-primitives"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ff773c0ef8c655c98071d3026a63950798a66b2f45baef22d8334c1756f1bd18"
+dependencies = [
+ "ark-ec",
+ "ark-ff",
+ "ark-relations",
+ "ark-serialize",
+ "ark-snark",
+ "ark-std",
+ "blake2",
+ "derivative",
+ "digest 0.9.0",
+]
+
+[[package]]
+name = "ark-ec"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dea978406c4b1ca13c2db2373b05cc55429c3575b8b21f1b9ee859aa5b03dd42"
+dependencies = [
+ "ark-ff",
+ "ark-serialize",
+ "ark-std",
+ "derivative",
+ "num-traits",
+ "zeroize",
+]
+
+[[package]]
+name = "ark-ff"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6b3235cc41ee7a12aaaf2c575a2ad7b46713a8a50bda2fc3b003a04845c05dd6"
+dependencies = [
+ "ark-ff-asm",
+ "ark-ff-macros",
+ "ark-serialize",
+ "ark-std",
+ "derivative",
+ "num-bigint 0.4.0",
+ "num-traits",
+ "paste",
+ "rustc_version 0.3.3",
+ "zeroize",
+]
+
+[[package]]
+name = "ark-ff-asm"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "db02d390bf6643fb404d3d22d31aee1c4bc4459600aef9113833d17e786c6e44"
+dependencies = [
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "ark-ff-macros"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "db2fd794a08ccb318058009eefdf15bcaaaaf6f8161eb3345f907222bac38b20"
+dependencies = [
+ "num-bigint 0.4.0",
+ "num-traits",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "ark-groth16"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "38f8fff7468e947130b5caf9bdd27de8b913cf30e15104b4f0cd301726b3d897"
+dependencies = [
+ "ark-crypto-primitives",
+ "ark-ec",
+ "ark-ff",
+ "ark-poly",
+ "ark-relations",
+ "ark-serialize",
+ "ark-std",
+]
+
+[[package]]
+name = "ark-poly"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b0f78f47537c2f15706db7e98fe64cc1711dbf9def81218194e17239e53e5aa"
+dependencies = [
+ "ark-ff",
+ "ark-serialize",
+ "ark-std",
+ "derivative",
+ "hashbrown 0.11.2",
+]
+
+[[package]]
+name = "ark-relations"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4cba4c1c99792a6834bd97f7fd76578ec2cd58d2afc5139a17e1d1bec65b38f6"
+dependencies = [
+ "ark-ff",
+ "ark-std",
+ "tracing",
+]
+
+[[package]]
+name = "ark-serialize"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d6c2b318ee6e10f8c2853e73a83adc0ccb88995aa978d8a3408d492ab2ee671"
+dependencies = [
+ "ark-serialize-derive",
+ "ark-std",
+ "digest 0.9.0",
+]
+
+[[package]]
+name = "ark-serialize-derive"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8dd4e5f0bf8285d5ed538d27fab7411f3e297908fd93c62195de8bee3f199e82"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "ark-snark"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0dc3dff1a5f67a9c0b34df32b079752d8dd17f1e9d06253da0453db6c1b7cc8a"
+dependencies = [
+ "ark-ff",
+ "ark-relations",
+ "ark-std",
+]
+
+[[package]]
+name = "ark-std"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1df2c09229cbc5a028b1d70e00fdb2acee28b1055dfb5ca73eea49c5a25c4e7c"
+dependencies = [
+ "num-traits",
+ "rand 0.8.4",
 ]
 
 [[package]]
@@ -414,7 +635,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "904dfeac50f3cdaba28fc6f57fdcddb75f49ed61346676a78c4ffe55877802fd"
 
 [[package]]
-name = "benefit"
+name = "benefits"
 version = "3.0.0"
 dependencies = [
  "frame-benchmarking",
@@ -425,7 +646,7 @@ dependencies = [
  "sp-core",
  "sp-io",
  "sp-runtime",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
  "ttc-primitives",
 ]
 
@@ -1189,6 +1410,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "derivative"
+version = "2.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fcc3dd5e9e9c0b295d6e1e4d811fb6f157d5ffd784b8d202fc62eac8035a770b"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "derive_more"
 version = "0.99.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1323,6 +1555,15 @@ dependencies = [
  "serde",
  "sha2 0.9.5",
  "zeroize",
+]
+
+[[package]]
+name = "eddsa"
+version = "0.1.0"
+dependencies = [
+ "once_cell",
+ "tiny-keccak",
+ "zkp-u256",
 ]
 
 [[package]]
@@ -1554,7 +1795,7 @@ dependencies = [
  "sp-io",
  "sp-runtime",
  "sp-runtime-interface",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
  "sp-storage",
 ]
 
@@ -1589,9 +1830,9 @@ dependencies = [
  "frame-support",
  "frame-system",
  "parity-scale-codec",
- "sp-arithmetic",
+ "sp-arithmetic 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
  "sp-npos-elections",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
 ]
 
 [[package]]
@@ -1605,7 +1846,7 @@ dependencies = [
  "sp-core",
  "sp-io",
  "sp-runtime",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
  "sp-tracing",
 ]
 
@@ -1617,7 +1858,7 @@ dependencies = [
  "parity-scale-codec",
  "serde",
  "sp-core",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
 ]
 
 [[package]]
@@ -1636,14 +1877,14 @@ dependencies = [
  "paste",
  "serde",
  "smallvec 1.6.1",
- "sp-arithmetic",
+ "sp-arithmetic 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
  "sp-core",
  "sp-inherents",
  "sp-io",
  "sp-runtime",
  "sp-staking",
  "sp-state-machine",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
  "sp-tracing",
 ]
 
@@ -1694,7 +1935,7 @@ dependencies = [
  "sp-core",
  "sp-io",
  "sp-runtime",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
  "sp-version",
 ]
 
@@ -1709,7 +1950,7 @@ dependencies = [
  "parity-scale-codec",
  "sp-core",
  "sp-runtime",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
 ]
 
 [[package]]
@@ -2094,7 +2335,7 @@ version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d7afe4a420e3fe79967a00898cc1f4db7c8a49a9333a29f8a4bd76a253d5cd04"
 dependencies = [
- "ahash",
+ "ahash 0.4.7",
 ]
 
 [[package]]
@@ -2102,6 +2343,9 @@ name = "hashbrown"
 version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ab5ef0d4909ef3724cc8cce6ccc8572c5c817592e9285f5464f8e86f8bd3726e"
+dependencies = [
+ "ahash 0.7.4",
+]
 
 [[package]]
 name = "heck"
@@ -2263,7 +2507,7 @@ dependencies = [
  "itoa",
  "log",
  "net2",
- "rustc_version",
+ "rustc_version 0.2.3",
  "time",
  "tokio 0.1.22",
  "tokio-buf",
@@ -2415,6 +2659,74 @@ dependencies = [
  "autocfg",
  "hashbrown 0.11.2",
  "serde",
+]
+
+[[package]]
+name = "ink_allocator"
+version = "3.0.0-rc4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "de7684a210829f47a9e49a1500ff39f2e7ab13ffbb18e6f2d37ab88258dfab15"
+dependencies = [
+ "cfg-if 1.0.0",
+]
+
+[[package]]
+name = "ink_env"
+version = "3.0.0-rc4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0357f166ff1b09a631e5b44b692c69ed5ddd2c4d063f8923b21c169a607c226f"
+dependencies = [
+ "arrayref",
+ "blake2",
+ "cfg-if 1.0.0",
+ "derive_more",
+ "ink_allocator",
+ "ink_metadata",
+ "ink_prelude",
+ "ink_primitives",
+ "num-traits",
+ "parity-scale-codec",
+ "paste",
+ "rand 0.8.4",
+ "scale-info",
+ "sha2 0.9.5",
+ "sha3",
+ "sp-arithmetic 3.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "static_assertions",
+]
+
+[[package]]
+name = "ink_metadata"
+version = "3.0.0-rc4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7ef22d44816f83483e2f68bc4d6fe3c438f5bd6634ded5b07323851724baad92"
+dependencies = [
+ "derive_more",
+ "impl-serde",
+ "ink_prelude",
+ "ink_primitives",
+ "scale-info",
+ "serde",
+]
+
+[[package]]
+name = "ink_prelude"
+version = "3.0.0-rc4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d71c2a09306902b63d343ebd26c20fb4319f86f7a15e13a7eed5c216405734e2"
+dependencies = [
+ "cfg-if 1.0.0",
+]
+
+[[package]]
+name = "ink_primitives"
+version = "3.0.0-rc4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2ab6d9e021fa0f814d6290e1798c4284f416118b7d25ae2ee37653640bf3fb9c"
+dependencies = [
+ "ink_prelude",
+ "parity-scale-codec",
+ "scale-info",
 ]
 
 [[package]]
@@ -3424,6 +3736,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "71d96e3f3c0b6325d8ccd83c33b28acb183edcb6c67938ba104ec546854b0882"
 
 [[package]]
+name = "merkle-tree"
+version = "0.1.0"
+dependencies = [
+ "num-traits",
+ "once_cell",
+ "tiny-keccak",
+ "zkp-u256",
+]
+
+[[package]]
 name = "merlin"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3658,6 +3980,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "no-std-compat"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b93853da6d84c2e3c7d730d6473e8817692dd89be387eb01b94d7f108ecb5b8c"
+
+[[package]]
 name = "node-template"
 version = "3.0.0"
 dependencies = [
@@ -3721,7 +4049,7 @@ dependencies = [
 name = "node-template-runtime"
 version = "3.0.0"
 dependencies = [
- "benefit",
+ "benefits",
  "frame-benchmarking",
  "frame-election-provider-support",
  "frame-executive",
@@ -3744,14 +4072,15 @@ dependencies = [
  "pallet-staking",
  "pallet-staking-reward-curve",
  "pallet-sudo",
- "pallet-template",
  "pallet-timestamp",
  "pallet-transaction-payment",
  "pallet-transaction-payment-rpc-runtime-api",
  "pallet-utility",
  "parity-scale-codec",
  "payment",
+ "smallvec 1.6.1",
  "sp-api",
+ "sp-arithmetic 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
  "sp-authority-discovery",
  "sp-block-builder",
  "sp-consensus-babe",
@@ -3762,7 +4091,7 @@ dependencies = [
  "sp-runtime",
  "sp-session",
  "sp-staking",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
  "sp-transaction-pool",
  "sp-version",
  "storage-order",
@@ -3807,6 +4136,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "num-bigint"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4e0d047c1062aa51e256408c560894e5251f08925980e53cf1aa5bd00eec6512"
+dependencies = [
+ "autocfg",
+ "num-integer",
+ "num-traits",
+]
+
+[[package]]
 name = "num-complex"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3832,7 +4172,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5c000134b5dbf44adc5cb772486d335293351644b801551abe8f75c84cfa4aef"
 dependencies = [
  "autocfg",
- "num-bigint",
+ "num-bigint 0.2.6",
  "num-integer",
  "num-traits",
 ]
@@ -3935,7 +4275,7 @@ dependencies = [
  "sp-application-crypto",
  "sp-authority-discovery",
  "sp-runtime",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
 ]
 
 [[package]]
@@ -3949,7 +4289,7 @@ dependencies = [
  "parity-scale-codec",
  "sp-authorship",
  "sp-runtime",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
 ]
 
 [[package]]
@@ -3972,7 +4312,7 @@ dependencies = [
  "sp-runtime",
  "sp-session",
  "sp-staking",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
 ]
 
 [[package]]
@@ -3987,7 +4327,7 @@ dependencies = [
  "max-encoded-len",
  "parity-scale-codec",
  "sp-runtime",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
 ]
 
 [[package]]
@@ -4002,7 +4342,7 @@ dependencies = [
  "sp-core",
  "sp-io",
  "sp-runtime",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
 ]
 
 [[package]]
@@ -4015,12 +4355,12 @@ dependencies = [
  "frame-system",
  "log",
  "parity-scale-codec",
- "sp-arithmetic",
+ "sp-arithmetic 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
  "sp-core",
  "sp-io",
  "sp-npos-elections",
  "sp-runtime",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
  "static_assertions",
 ]
 
@@ -4043,7 +4383,7 @@ dependencies = [
  "sp-runtime",
  "sp-session",
  "sp-staking",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
 ]
 
 [[package]]
@@ -4059,7 +4399,7 @@ dependencies = [
  "sp-api",
  "sp-core",
  "sp-runtime",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
 ]
 
 [[package]]
@@ -4093,7 +4433,7 @@ dependencies = [
  "serde",
  "sp-runtime",
  "sp-staking",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
 ]
 
 [[package]]
@@ -4106,7 +4446,7 @@ dependencies = [
  "parity-scale-codec",
  "safe-mix",
  "sp-runtime",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
 ]
 
 [[package]]
@@ -4121,7 +4461,7 @@ dependencies = [
  "parity-scale-codec",
  "sp-io",
  "sp-runtime",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
 ]
 
 [[package]]
@@ -4140,7 +4480,7 @@ dependencies = [
  "sp-runtime",
  "sp-session",
  "sp-staking",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
  "sp-trie",
 ]
 
@@ -4169,7 +4509,7 @@ dependencies = [
  "sp-io",
  "sp-runtime",
  "sp-staking",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
  "sp-storage",
  "sp-tracing",
  "static_assertions",
@@ -4199,21 +4539,7 @@ dependencies = [
  "parity-scale-codec",
  "sp-io",
  "sp-runtime",
- "sp-std",
-]
-
-[[package]]
-name = "pallet-template"
-version = "3.0.0"
-dependencies = [
- "frame-benchmarking",
- "frame-support",
- "frame-system",
- "parity-scale-codec",
- "serde",
- "sp-core",
- "sp-io",
- "sp-runtime",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
 ]
 
 [[package]]
@@ -4230,7 +4556,7 @@ dependencies = [
  "sp-inherents",
  "sp-io",
  "sp-runtime",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
  "sp-timestamp",
 ]
 
@@ -4247,7 +4573,7 @@ dependencies = [
  "sp-core",
  "sp-io",
  "sp-runtime",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
 ]
 
 [[package]]
@@ -4289,7 +4615,7 @@ dependencies = [
  "sp-core",
  "sp-io",
  "sp-runtime",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
 ]
 
 [[package]]
@@ -4451,7 +4777,7 @@ checksum = "f842b1982eb6c2fe34036a4fbfb06dd185a3f5c8edfaacdf7d1ea10b07de6252"
 dependencies = [
  "lock_api 0.3.4",
  "parking_lot_core 0.6.2",
- "rustc_version",
+ "rustc_version 0.2.3",
 ]
 
 [[package]]
@@ -4485,7 +4811,7 @@ dependencies = [
  "cloudabi",
  "libc",
  "redox_syscall 0.1.57",
- "rustc_version",
+ "rustc_version 0.2.3",
  "smallvec 0.6.14",
  "winapi 0.3.9",
 ]
@@ -4537,7 +4863,7 @@ dependencies = [
  "sp-core",
  "sp-io",
  "sp-runtime",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
  "ttc-primitives",
 ]
 
@@ -5308,6 +5634,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustc_version"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f0dfe2087c51c460008730de8b57e6a320782fbfb312e1f4d520e6c6fae155ee"
+dependencies = [
+ "semver 0.11.0",
+]
+
+[[package]]
 name = "rustls"
 version = "0.18.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5378,7 +5713,7 @@ version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6d3d055a2582e6b00ed7a31c1524040aa391092bf636328350813f3a0605215c"
 dependencies = [
- "rustc_version",
+ "rustc_version 0.2.3",
 ]
 
 [[package]]
@@ -5406,7 +5741,7 @@ source = "git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07#838
 dependencies = [
  "log",
  "sp-core",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
  "sp-wasm-interface",
  "thiserror",
 ]
@@ -5573,7 +5908,7 @@ dependencies = [
  "sp-keystore",
  "sp-runtime",
  "sp-state-machine",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
  "sp-storage",
  "sp-transaction-pool",
  "sp-trie",
@@ -5601,7 +5936,7 @@ dependencies = [
  "sc-client-api",
  "sc-executor",
  "sc-state-db",
- "sp-arithmetic",
+ "sp-arithmetic 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
  "sp-blockchain",
  "sp-consensus",
  "sp-core",
@@ -5668,7 +6003,7 @@ dependencies = [
  "futures-timer 3.0.2",
  "log",
  "merlin",
- "num-bigint",
+ "num-bigint 0.2.6",
  "num-rational 0.2.4",
  "num-traits",
  "parity-scale-codec",
@@ -5754,7 +6089,7 @@ dependencies = [
  "sc-telemetry",
  "sp-api",
  "sp-application-crypto",
- "sp-arithmetic",
+ "sp-arithmetic 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
  "sp-blockchain",
  "sp-consensus",
  "sp-consensus-slots",
@@ -5886,7 +6221,7 @@ dependencies = [
  "serde_json",
  "sp-api",
  "sp-application-crypto",
- "sp-arithmetic",
+ "sp-arithmetic 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
  "sp-blockchain",
  "sp-consensus",
  "sp-core",
@@ -6040,7 +6375,7 @@ dependencies = [
  "serde",
  "serde_json",
  "smallvec 1.6.1",
- "sp-arithmetic",
+ "sp-arithmetic 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
  "sp-blockchain",
  "sp-consensus",
  "sp-core",
@@ -6416,6 +6751,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "scale-info"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bdd819984fe6ce661ebed1f451c0848d301a05ff56b8a4b0ae420de7dca046ea"
+dependencies = [
+ "cfg-if 1.0.0",
+ "derive_more",
+ "parity-scale-codec",
+ "scale-info-derive",
+ "serde",
+]
+
+[[package]]
+name = "scale-info-derive"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e321c3d4ef7d3a90b0b4eda276d4215c6cbf3d59f66a9934e7866a48dcaa29b3"
+dependencies = [
+ "proc-macro-crate 0.1.5",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "schannel"
 version = "0.1.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6747,7 +7107,7 @@ dependencies = [
  "rand 0.7.3",
  "rand_core 0.5.1",
  "ring",
- "rustc_version",
+ "rustc_version 0.2.3",
  "sha2 0.9.5",
  "subtle 2.4.0",
  "x25519-dalek",
@@ -6802,7 +7162,7 @@ dependencies = [
  "sp-core",
  "sp-runtime",
  "sp-state-machine",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
  "sp-version",
  "thiserror",
 ]
@@ -6829,7 +7189,20 @@ dependencies = [
  "serde",
  "sp-core",
  "sp-io",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
+]
+
+[[package]]
+name = "sp-arithmetic"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d0f1c69966c192d1dee8521f0b29ece2b14db07b9b44d801a94e295234761645"
+dependencies = [
+ "integer-sqrt",
+ "num-traits",
+ "parity-scale-codec",
+ "sp-debug-derive 3.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "sp-std 3.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -6841,8 +7214,8 @@ dependencies = [
  "num-traits",
  "parity-scale-codec",
  "serde",
- "sp-debug-derive",
- "sp-std",
+ "sp-debug-derive 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
  "static_assertions",
 ]
 
@@ -6855,7 +7228,7 @@ dependencies = [
  "sp-api",
  "sp-application-crypto",
  "sp-runtime",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
 ]
 
 [[package]]
@@ -6867,7 +7240,7 @@ dependencies = [
  "parity-scale-codec",
  "sp-inherents",
  "sp-runtime",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
 ]
 
 [[package]]
@@ -6879,7 +7252,7 @@ dependencies = [
  "sp-api",
  "sp-inherents",
  "sp-runtime",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
 ]
 
 [[package]]
@@ -6918,7 +7291,7 @@ dependencies = [
  "sp-inherents",
  "sp-runtime",
  "sp-state-machine",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
  "sp-trie",
  "sp-utils",
  "sp-version",
@@ -6940,7 +7313,7 @@ dependencies = [
  "sp-consensus-slots",
  "sp-inherents",
  "sp-runtime",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
  "sp-timestamp",
 ]
 
@@ -6962,7 +7335,7 @@ dependencies = [
  "sp-inherents",
  "sp-keystore",
  "sp-runtime",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
  "sp-timestamp",
 ]
 
@@ -6972,7 +7345,7 @@ version = "0.9.0"
 source = "git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07#83808aa815a9fbc528b76cd25ae1dec57e269771"
 dependencies = [
  "parity-scale-codec",
- "sp-arithmetic",
+ "sp-arithmetic 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
  "sp-runtime",
 ]
 
@@ -6985,7 +7358,7 @@ dependencies = [
  "schnorrkel",
  "sp-core",
  "sp-runtime",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
 ]
 
 [[package]]
@@ -7019,10 +7392,10 @@ dependencies = [
  "secrecy",
  "serde",
  "sha2 0.9.5",
- "sp-debug-derive",
+ "sp-debug-derive 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
  "sp-externalities",
  "sp-runtime-interface",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
  "sp-storage",
  "substrate-bip39",
  "thiserror",
@@ -7045,6 +7418,17 @@ dependencies = [
 [[package]]
 name = "sp-debug-derive"
 version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e80275f23b4e7ba8f54dec5f90f016530e7307d2ee9445f617ab986cbe97f31e"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "sp-debug-derive"
+version = "3.0.0"
 source = "git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07#83808aa815a9fbc528b76cd25ae1dec57e269771"
 dependencies = [
  "proc-macro2",
@@ -7059,7 +7443,7 @@ source = "git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07#838
 dependencies = [
  "environmental",
  "parity-scale-codec",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
  "sp-storage",
 ]
 
@@ -7077,7 +7461,7 @@ dependencies = [
  "sp-core",
  "sp-keystore",
  "sp-runtime",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
 ]
 
 [[package]]
@@ -7090,7 +7474,7 @@ dependencies = [
  "parity-scale-codec",
  "sp-core",
  "sp-runtime",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
  "thiserror",
 ]
 
@@ -7111,7 +7495,7 @@ dependencies = [
  "sp-maybe-compressed-blob",
  "sp-runtime-interface",
  "sp-state-machine",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
  "sp-tracing",
  "sp-trie",
  "sp-wasm-interface",
@@ -7163,10 +7547,10 @@ source = "git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07#838
 dependencies = [
  "parity-scale-codec",
  "serde",
- "sp-arithmetic",
+ "sp-arithmetic 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
  "sp-core",
  "sp-npos-elections-compact",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
 ]
 
 [[package]]
@@ -7225,10 +7609,10 @@ dependencies = [
  "rand 0.7.3",
  "serde",
  "sp-application-crypto",
- "sp-arithmetic",
+ "sp-arithmetic 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
  "sp-core",
  "sp-io",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
 ]
 
 [[package]]
@@ -7241,7 +7625,7 @@ dependencies = [
  "primitive-types",
  "sp-externalities",
  "sp-runtime-interface-proc-macro",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
  "sp-storage",
  "sp-tracing",
  "sp-wasm-interface",
@@ -7279,7 +7663,7 @@ dependencies = [
  "sp-core",
  "sp-runtime",
  "sp-staking",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
 ]
 
 [[package]]
@@ -7289,7 +7673,7 @@ source = "git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07#838
 dependencies = [
  "parity-scale-codec",
  "sp-runtime",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
 ]
 
 [[package]]
@@ -7307,13 +7691,19 @@ dependencies = [
  "sp-core",
  "sp-externalities",
  "sp-panic-handler",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
  "sp-trie",
  "thiserror",
  "tracing",
  "trie-db",
  "trie-root",
 ]
+
+[[package]]
+name = "sp-std"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "35391ea974fa5ee869cb094d5b437688fbf3d8127d64d1b9fed5822a1ed39b12"
 
 [[package]]
 name = "sp-std"
@@ -7329,8 +7719,8 @@ dependencies = [
  "parity-scale-codec",
  "ref-cast",
  "serde",
- "sp-debug-derive",
- "sp-std",
+ "sp-debug-derive 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
 ]
 
 [[package]]
@@ -7343,7 +7733,7 @@ dependencies = [
  "sp-externalities",
  "sp-io",
  "sp-runtime-interface",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
 ]
 
 [[package]]
@@ -7358,7 +7748,7 @@ dependencies = [
  "sp-api",
  "sp-inherents",
  "sp-runtime",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
  "thiserror",
  "wasm-timer",
 ]
@@ -7375,7 +7765,7 @@ dependencies = [
  "serde",
  "serde_json",
  "slog",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
  "tracing",
  "tracing-core",
  "tracing-subscriber",
@@ -7408,7 +7798,7 @@ dependencies = [
  "sp-core",
  "sp-inherents",
  "sp-runtime",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
  "sp-trie",
 ]
 
@@ -7421,7 +7811,7 @@ dependencies = [
  "memory-db",
  "parity-scale-codec",
  "sp-core",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
  "trie-db",
  "trie-root",
 ]
@@ -7447,7 +7837,7 @@ dependencies = [
  "parity-scale-codec",
  "serde",
  "sp-runtime",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
  "sp-version-proc-macro",
 ]
 
@@ -7470,7 +7860,7 @@ source = "git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07#838
 dependencies = [
  "impl-trait-for-tuples",
  "parity-scale-codec",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
  "wasmi",
 ]
 
@@ -7519,7 +7909,7 @@ dependencies = [
  "sp-core",
  "sp-io",
  "sp-runtime",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
  "ttc-primitives",
 ]
 
@@ -8347,9 +8737,9 @@ dependencies = [
  "serde",
  "serde_json",
  "sp-core",
- "sp-debug-derive",
+ "sp-debug-derive 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
  "sp-runtime",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
 ]
 
 [[package]]
@@ -9041,17 +9431,30 @@ dependencies = [
 name = "worker"
 version = "3.0.0"
 dependencies = [
+ "ark-bls12-377",
+ "ark-bls12-381",
+ "ark-bn254",
+ "ark-bw6-761",
+ "ark-cp6-782",
+ "ark-ec",
+ "ark-ff",
+ "ark-groth16",
+ "ark-relations",
+ "ark-serialize",
+ "ark-std",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
  "parity-scale-codec",
+ "rand 0.8.4",
  "serde",
  "serde_json",
  "sp-core",
  "sp-io",
  "sp-runtime",
- "sp-std",
+ "sp-std 3.0.0 (git+https://gitee.com/mohaijiang/substrate.git?tag=monthly-2021-07)",
  "ttc-primitives",
+ "zkmega-arkworks",
 ]
 
 [[package]]
@@ -9141,6 +9544,43 @@ dependencies = [
  "quote",
  "syn",
  "synstructure",
+]
+
+[[package]]
+name = "zkmega-arkworks"
+version = "0.1.0"
+dependencies = [
+ "ark-bls12-377",
+ "ark-bls12-381",
+ "ark-bn254",
+ "ark-bw6-761",
+ "ark-cp6-782",
+ "ark-ec",
+ "ark-ff",
+ "ark-groth16",
+ "ark-relations",
+ "ark-serialize",
+ "ark-std",
+ "hex",
+ "ink_env",
+ "num-bigint 0.4.0",
+ "parity-scale-codec",
+ "rand 0.8.4",
+]
+
+[[package]]
+name = "zkp-u256"
+version = "0.2.0"
+source = "git+https://github.com/patractlabs/OpenZKP?branch=master#a71c96e23a2a831bb2c97268bb1113480c42876b"
+dependencies = [
+ "crunchy",
+ "hex",
+ "itertools 0.9.0",
+ "no-std-compat",
+ "num-traits",
+ "parity-scale-codec",
+ "rand 0.7.3",
+ "serde",
 ]
 
 [[package]]

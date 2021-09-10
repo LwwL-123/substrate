@@ -47,13 +47,13 @@ pub struct ReportInfo {
     /// 订单索引
     pub orders: Vec<u64>,
     /// 总存储量
-    pub total_storage: u64,
+    pub total_storage: u128,
     /// 已用存储
-    pub used_storage: u64
+    pub used_storage: u128
 }
 
 impl ReportInfo {
-    pub fn new (orders: Vec<u64>, total_storage: u64, used_storage: u64) -> Self {
+    pub fn new (orders: Vec<u64>, total_storage: u128, used_storage: u128) -> Self {
         ReportInfo {
             orders,
             total_storage,
@@ -69,7 +69,9 @@ pub trait WorkerInterface {
     type Balance;
     /// 获取订单矿工列表
     fn order_miners(order_id: u64) -> Vec<Self::AccountId>;
-
     /// 记录矿工收益
     fn record_miner_income(account_id: &Self::AccountId,income: Self::Balance);
+
+    /// 获得总资源空间和可用空间
+    fn get_total_and_used() -> (u128, u128);
 }
