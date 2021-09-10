@@ -63,32 +63,6 @@ pub use primitives::{
 	*
 };
 
-/// Simple structure that exposes how u64 currency can be represented as... u64.
-pub struct CurrencyToVoteHandler;
-
-impl Convert<u64, u64> for CurrencyToVoteHandler {
-	fn convert(x: u64) -> u64 {
-		x
-	}
-}
-impl Convert<u128, u128> for CurrencyToVoteHandler {
-	fn convert(x: u128) -> u128 {
-		x
-	}
-}
-impl Convert<u128, u64> for CurrencyToVoteHandler {
-	fn convert(x: u128) -> u64 {
-		x.saturated_into()
-	}
-}
-
-impl Convert<u64, u128> for CurrencyToVoteHandler {
-	fn convert(x: u64) -> u128 {
-		x as u128
-	}
-}
-
-
 /// Opaque types. These are used by the CLI to instantiate machinery that don't need to know
 /// the specifics of the runtime. They can then be made to be agnostic over specific formats
 /// of data like extrinsics, allowing for them to continue syncing the network through upgrades
@@ -585,6 +559,7 @@ impl worker::Config for Runtime {
 	type StorageOrderInterface = StorageOrder;
 	type AverageIncomeLimit = AverageIncomeLimit;
 	type Works = Staking;
+	type BenefitInterface = Benefits;
 }
 
 parameter_types! {

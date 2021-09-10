@@ -145,6 +145,8 @@ pub mod pallet {
 		OrderFinish(u64),
 		/// 订单取消
 		OrderCanceled(u64, Vec<u8>),
+		/// 设置初始化费用金额
+		SetBaseFeeSuccess(BalanceOf<T>),
 	}
 
 	#[pallet::hooks]
@@ -263,6 +265,18 @@ pub mod pallet {
 			Self::deposit_event(Event::OrderCreated(order.index,order.cid,order.account_id,order.file_name,
 													order.storage_deadline,order.file_size));
 			// Return a successful DispatchResultWithPostInfo
+			Ok(())
+		}
+
+		/// 设置订单基本费用
+		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
+		pub fn set_free_base_fee(origin: OriginFor<T>, new_base_fee: BalanceOf<T>) -> DispatchResult {
+			ensure_root(origin)?;
+
+			FileBaseFee::<T>::put(new_base_fee.clone());
+
+			Self::deposit_event(Event::SetBaseFeeSuccess(new_base_fee));
+
 			Ok(())
 		}
 	}

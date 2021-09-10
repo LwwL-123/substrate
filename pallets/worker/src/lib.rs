@@ -9,18 +9,22 @@ use sp_std::vec::Vec;
 use frame_support::{
 	traits::{Currency},
 	ensure,
-	dispatch::DispatchResult, pallet_prelude::*
+	dispatch::{DispatchResult, DispatchResultWithPostInfo}, pallet_prelude::*,
+	weights::{
+		Pays
+	}
 };
 use sp_runtime::traits::{Convert, Zero};
 
 use primitives::p_storage_order::StorageOrderInterface;
 use primitives::p_storage_order::StorageOrderStatus;
 use primitives::p_worker::*;
+use primitives::p_benefit::BenefitInterface;
 
 mod zk;
 
 type BalanceOf<T> = <<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
-
+type NegativeImbalanceOf<T> = <<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::NegativeImbalance;
 
 use sp_std::collections::btree_map::BTreeMap;
 /// An event handler for reporting works
@@ -66,6 +70,9 @@ pub mod pallet {
 
 		/// 工作量证明上报接口
 		type Works: Works<Self::AccountId>;
+
+		/// 折扣接口
+		type BenefitInterface: BenefitInterface<Self::AccountId, BalanceOf<Self>, NegativeImbalanceOf<Self>>;
 	}
 
 	/// 矿工个数
@@ -203,6 +210,12 @@ pub mod pallet {
 			}
 			//更新存储空间数据
 			Self::update_storage(&who,total_storage,used_storage);
+			//存入当前阶段时空证明
+			//获得当前块高
+			let block_number = <frame_system::Pallet<T>>::block_number();
+			//计算当前阶段
+			let block_number = block_number - (block_number % T::ReportInterval::get());
+			Report::<T>::insert(block_number,&who,ReportInfo::new(Vec::<u64>::new(),total_storage,used_storage));
 			Self::deposit_event(Event::RegisterSuccess(who));
 			Ok(())
 		}
@@ -258,7 +271,7 @@ pub mod pallet {
 			proofs: Vec<Vec<u8>>,
 			total_storage: u128,
 			used_storage: u128
-		) -> DispatchResult {
+		) -> DispatchResultWithPostInfo {
 			let who = ensure_signed(origin)?;
 			//获得当前阶段
 			//获得当前块高
@@ -281,7 +294,6 @@ pub mod pallet {
 				//添加入矿工订单中
 				MinerOrderSet::<T>::insert(&who,orders.clone());
 			}else{
-
 				// 校验订单的时空证明
 				for index in 0..orders.len() {
 					let order_opt = T::StorageOrderInterface::get_storage_order(&orders[index]);
@@ -294,7 +306,6 @@ pub mod pallet {
 						ensure!(zk_validate,Error::<T>::ProofInvalid);
 					}
 				}
-
 				//订单过滤
 				let miner_orders = miner_orders.into_iter().filter(|index| {
 					let result = orders.contains(index);
@@ -313,9 +324,13 @@ pub mod pallet {
 			//更新存储空间数据
 			Self::update_storage(&who,total_storage,used_storage);
 			//存入时空证明
-			Report::<T>::insert(block_number,who.clone(),ReportInfo::new(orders,total_storage,used_storage));
-			Self::deposit_event(Event::ProofOfSpacetimeFinish(who));
-			Ok(())
+			Report::<T>::insert(block_number,&who,ReportInfo::new(orders,total_storage,used_storage));
+			Self::deposit_event(Event::ProofOfSpacetimeFinish(who.clone()));
+			//存入时空证明后进行判断是否可以免除手续费
+			if T::BenefitInterface::maybe_free_count(&who) {
+				return Ok(Pays::No.into());
+			}
+			Ok(Pays::Yes.into())
 		}
 	}
 }
@@ -344,21 +359,21 @@ impl<T: Config> Pallet<T> {
 		//工作量上报数据
 		let mut workload_map = BTreeMap::<T::AccountId, u128>::new();
 		//查询当前矿工节点
-		Miners::<T>::get().into_iter().for_each(|miner| {
-			let result = Report::<T>::contains_key(block_number, &miner);
+		let miners = Miners::<T>::get().into_iter().filter(|miner| {
+			let result = Report::<T>::contains_key(block_number, miner);
 			//如果不存在
 			if !result {
 				//获得矿工订单列表
-				let orders = MinerOrderSet::<T>::get(&miner);
+				let orders = MinerOrderSet::<T>::get(miner);
 				//删除订单矿工信息
 				orders.into_iter().for_each(|order_index| {
 					//在订单矿工数据中删除该矿工
-					Self::sub_miner_set_of_order(&order_index,&miner);
+					Self::sub_miner_set_of_order(&order_index,miner);
 					//减掉订单信息副本
 					T::StorageOrderInterface::sub_order_replication(&order_index);
 				});
 				//删除矿工订单信息
-				MinerOrderSet::<T>::remove(&miner);
+				MinerOrderSet::<T>::remove(miner);
 				//删除矿工存储
 				MinerTotalStorage::<T>::remove(&miner);
 				MinerUsedStorage::<T>::remove(&miner);
@@ -369,7 +384,12 @@ impl<T: Config> Pallet<T> {
 				//todo 关于副本系数获得有效存储空间
 				workload_map.insert(miner.clone(), total_storage);
 			}
-		});
+			result
+		}).collect::<Vec<T::AccountId>>();
+		//维护矿工节点个数信息
+		MinerCount::<T>::put(miners.len() as u64);
+		//维护矿工信息
+		Miners::<T>::put(miners);
 		//更新总存储
 		let total_storage = MinerTotalStorage::<T>::iter_values().sum::<u128>();
 		TotalStorage::<T>::put(total_storage);
