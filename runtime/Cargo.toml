@@ -88,6 +88,10 @@ std = [
     'payment/std',
     'sp-arithmetic/std',
     "pallet-offences/std",
+    'frame-support/std',
+    "pallet-timestamp/std",
+    "pallet-transaction-payment-rpc-runtime-api/std",
+    "pallet-transaction-payment/std",
 ]
 
 [dependencies]

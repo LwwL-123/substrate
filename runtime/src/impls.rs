@@ -148,7 +148,7 @@ impl<T, C, R, OU> OnChargeTransaction<T> for CurrencyAdapter<C, R, OU>
             // merge the imbalance caused by paying the fees and refunding parts of it again.
             let adjusted_paid = paid
                 .offset(refund_imbalance)
-                .try_same()
+                .same()
                 .map_err(|_| TransactionValidityError::Invalid(InvalidTransaction::Payment))?;
             // Call someone else to handle the imbalance (fee and tip separately)
             let imbalances = adjusted_paid.split(tip);

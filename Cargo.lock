@@ -239,7 +239,7 @@ dependencies = [
  "ark-serialize",
  "ark-std",
  "derivative",
- "num-bigint 0.4.0",
+ "num-bigint 0.4.2",
  "num-traits",
  "paste",
  "rustc_version 0.3.3",
@@ -262,7 +262,7 @@ version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db2fd794a08ccb318058009eefdf15bcaaaaf6f8161eb3345f907222bac38b20"
 dependencies = [
- "num-bigint 0.4.0",
+ "num-bigint 0.4.2",
  "num-traits",
  "quote",
  "syn",
@@ -4137,9 +4137,9 @@ dependencies = [
 
 [[package]]
 name = "num-bigint"
-version = "0.4.0"
+version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4e0d047c1062aa51e256408c560894e5251f08925980e53cf1aa5bd00eec6512"
+checksum = "74e768dff5fb39a41b3bcd30bb25cf989706c90d028d1ad71971987aa309d535"
 dependencies = [
  "autocfg",
  "num-integer",
@@ -9563,7 +9563,7 @@ dependencies = [
  "ark-std",
  "hex",
  "ink_env",
- "num-bigint 0.4.0",
+ "num-bigint 0.4.2",
  "parity-scale-codec",
  "rand 0.8.4",
 ]
