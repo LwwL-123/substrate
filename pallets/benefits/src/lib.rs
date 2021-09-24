@@ -101,6 +101,7 @@ pub struct SworkBenefit<Balance: HasCompact> {
     /// 报告矿工的总减少次数
     pub total_fee_reduction_count: u32,
     /// 已使用的费用减免
+    ///
     pub used_fee_reduction_count: u32,
     /// 最新更新的活跃era编号
     #[codec(compact)]

@@ -7,7 +7,7 @@
 pub use pallet::*;
 use sp_std::convert::TryInto;
 use sp_runtime::traits::Zero;
-use frame_support::{ traits::{ Currency, ExistenceRequirement},
+use frame_support::{ traits::{ Currency, ExistenceRequirement, WithdrawReasons, Imbalance},
 					 PalletId, dispatch::DispatchResult, pallet_prelude::*};
 use frame_system::pallet_prelude::*;
 use sp_runtime::{traits::{AccountIdConversion, Saturating}};
@@ -29,6 +29,19 @@ mod benchmarking;
 
 type BalanceOf<T> = <<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
 type NegativeImbalanceOf<T> = <<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::NegativeImbalance;
+type PositiveImbalanceOf<T> = <<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::PositiveImbalance;
+
+pub(crate) const LOG_TARGET: &'static str = "payment";
+
+#[macro_export]
+macro_rules! log {
+    ($level:tt, $patter:expr $(, $values:expr)* $(,)?) => {
+		log::$level!(
+			target: crate::LOG_TARGET,
+			concat!("[{:?}] 💸 ", $patter), <frame_system::Pallet<T>>::block_number() $(, $values)*
+		)
+    };
+}
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -39,7 +52,7 @@ pub mod pallet {
 	pub trait Config: frame_system::Config {
 		/// Because this pallet emits events, it depends on the runtime's definition of an event.
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
-		// 可以分润的矿工账户数量
+		/// 可以分润的矿工账户数量
 		type NumberOfIncomeMiner: Get<usize>;
 
 		/// 金额转换数字
@@ -88,6 +101,11 @@ pub mod pallet {
 	#[pallet::getter(fn miner_price)]
 	pub(super) type MinerPrice<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, BalanceOf<T>, OptionQuery>;
 
+	/// 矿工清算订单金额
+	#[pallet::storage]
+	#[pallet::getter(fn miner_order_calculate)]
+	pub(super) type MinerOrderCalculate<T: Config> =  StorageDoubleMap<_, Twox64Concat, T::AccountId, Twox64Concat, u64, BalanceOf<T>, ValueQuery>;
+
 	// Pallets use events to inform users when important changes are made.
 	// https://substrate.dev/docs/en/knowledgebase/runtime/events
 	#[pallet::event]
@@ -102,7 +120,7 @@ pub mod pallet {
 		CalculateSuccess(u64),
 
 		/// 领取收益
-		Withdrawal(T::AccountId, BalanceOf<T>),
+		Withdrawal(BalanceOf<T>, T::AccountId),
 	}
 
 	#[pallet::hooks]
@@ -176,6 +194,7 @@ pub mod pallet {
 								MinerPrice::<T>::insert(miner, one_payout_amount);
 							}
 						}
+						MinerOrderCalculate::<T>::mutate(miner, &order_index, |price| { *price = price.saturating_add(one_payout_amount) });
 						if rewarded_count == T::NumberOfIncomeMiner::get() {
 							break;
 						}
@@ -212,7 +231,7 @@ pub mod pallet {
 					// 记录累计收益
 					T::WorkerInterface::record_miner_income(&who,amount);
 					MinerPrice::<T>::remove(&who);
-					Self::deposit_event(Event::Withdrawal(who, amount));
+					Self::deposit_event(Event::Withdrawal(amount, who));
 				}
 			}
 			Ok(())
@@ -258,7 +277,7 @@ impl <T:Config> Pallet<T> {
 	fn transfer_reserved_and_storage_and_staking_pool(who: &T::AccountId, staking_amount: BalanceOf<T>, storage_amount: BalanceOf<T>, reserved_amount: BalanceOf<T>, liveness: ExistenceRequirement) -> DispatchResult {
 		T::Currency::transfer(&who, &Self::reserved_pool(), reserved_amount, liveness)?;
 		T::Currency::transfer(&who, &Self::staking_pool(), staking_amount, liveness)?;
-		T::Currency::transfer(&who, &Self::storage_pool(), storage_amount.clone(), liveness)?;
+		T::Currency::transfer(&who, &Self::storage_pool(), storage_amount, liveness)?;
 		Ok(())
 	}
 
@@ -273,7 +292,9 @@ impl <T:Config> Pallet<T> {
 				return true;
 			}
 		}
-		false
+		//todo 测试用
+		//false
+		true
 	}
 }
 
@@ -351,5 +372,42 @@ impl<T: Config> PaymentInterface for Pallet<T> {
 			},
 			None => ()
 		}
+	}
+
+	fn withdraw_staking_pool() -> BalanceOf<T> {
+		let staking_pool = Self::staking_pool();
+		// Leave the minimum balance to keep this account live.
+		let staking_amount = T::Currency::free_balance(&staking_pool);
+		let mut imbalance = <PositiveImbalanceOf<T>>::zero();
+		imbalance.subsume(T::Currency::burn(staking_amount.clone()));
+		if let Err(_) = T::Currency::settle(&staking_pool, imbalance, WithdrawReasons::TRANSFER, ExistenceRequirement::AllowDeath) {
+			log!(warn, "🏢 Something wrong during withdrawing staking pot. Admin/Council should pay attention to it.");
+			return Zero::zero();
+		}
+		staking_amount
+	}
+	//订单成功后将订单金额存入相应金额池中
+	fn transfer_reserved_and_storage_and_staking_pool_by_temporary_pool(order_index: &u64) {
+		// 查询当前订单金额拆分数据
+		match OrderSplitAmount::<T>::get(order_index) {
+			// 如果当前订单拆分数据存在则将数据进行交易
+			Some((staking_amount , storage_amount , reserved_amount)) => {
+				let dispatch_result = Self::transfer_reserved_and_storage_and_staking_pool(
+					&Self::temporary_pool(),
+					staking_amount,
+					storage_amount,
+					reserved_amount,
+					ExistenceRequirement::AllowDeath);
+				if dispatch_result.is_ok() {
+					//删除订单金额拆分数据暂存记录
+					OrderSplitAmount::<T>::remove(order_index);
+				}
+			},
+			None => ()
+		}
+	}
+
+	fn get_calculate_income_by_miner_and_order_index(account_id: &Self::AccountId, order_index: &u64) -> Self::Balance {
+		MinerOrderCalculate::<T>::get(account_id,order_index)
 	}
 }

@@ -37,8 +37,6 @@ pub mod pallet {
 
 		/// 订单等待时间
 		type OrderWaitingTime: Get<Self::BlockNumber>;
-		// 每byte 每天的价格
-		type PerByteDayPrice: Get<u64>;
 
 		/// 支付费用和持有余额的货币。
 		type Currency: Currency<Self::AccountId>;
@@ -48,7 +46,7 @@ pub mod pallet {
 		/// 区块高度转数字
 		type BlockNumberToNumber: Convert<Self::BlockNumber,u128>;
 
-		/// 订单接口
+		/// 订单支付接口
 		type PaymentInterface: PaymentInterface<AccountId = Self::AccountId, BlockNumber = Self::BlockNumber,Balance = BalanceOf<Self>>;
 
 		/// 文件基本费用
@@ -140,11 +138,11 @@ pub mod pallet {
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
 		/// 订单创建
-		OrderCreated(u64, Vec<u8>, T::AccountId, Vec<u8>, T::BlockNumber, u64),
+		OrderCreated(u128,T::AccountId,u64, Vec<u8>,Vec<u8>, T::BlockNumber, u64),
 		/// 订单完成
 		OrderFinish(u64),
 		/// 订单取消
-		OrderCanceled(u64, Vec<u8>),
+		OrderCanceled(u128,T::AccountId,u64, Vec<u8>),
 		/// 删除订单
 		OrderDeleted(u64),
 		/// 设置初始化费用金额
@@ -203,8 +201,6 @@ pub mod pallet {
 		OrderDoesNotExist,
 		/// 订单价格错误
 		OrderPriceError,
-		/// 删除订单索引错误
-		DeleteOrderError
 	}
 
 	// Dispatchable functions allows users to interact with the pallet and invoke state changes.
@@ -212,22 +208,6 @@ pub mod pallet {
 	// Dispatchable functions must be annotated with a weight and must return a DispatchResult.
 	#[pallet::call]
 	impl<T:Config> Pallet<T> {
-
-		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
-		pub fn delete_order(origin: OriginFor<T>,order_index: u64) -> DispatchResult {
-			ensure_root(origin)?;
-			//获取订单长度
-			let order_count = OrderCount::<T>::get();
-			ensure!( order_index  <= order_count - 1 , Error::<T>::DeleteOrderError);
-			if let Some(mut order_info) = OrderInfo::<T>::get(order_index) {
-				OrderInfo::<T>::remove(order_index);
-				//发送删除订单事件
-				Self::deposit_event(Event::OrderDeleted(order_index));
-			} else {
-				ensure!( true , Error::<T>::OrderDoesNotExist);
-			}
-			Ok(())
-		}
 
 		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
 		pub fn create_order(
@@ -251,6 +231,8 @@ pub mod pallet {
 			let storage_deadline = block_number + duration;
 			//计算价格
 			let (file_base_price, order_price) = Self::get_order_price(size,duration);
+			// 支付模块记录订单金额
+			T::PaymentInterface::pay_order(&order_index,file_base_price,order_price,tips,storage_deadline,&who)?;
 			//创建订单
 			let order = StorageOrder::new(
 				order_index,
@@ -258,11 +240,12 @@ pub mod pallet {
 				who.clone(),
 				file_name.clone(),
 				T::BalanceToNumber::convert(file_base_price + order_price + tips),
+				T::BalanceToNumber::convert(file_base_price),
+				T::BalanceToNumber::convert(order_price),
+				T::BalanceToNumber::convert(tips),
 				storage_deadline,
 				size,
 				block_number.clone());
-			// 支付模块记录订单金额
-			T::PaymentInterface::pay_order(&order_index,file_base_price,order_price,tips,order.storage_deadline,&who)?;
 			//存入区块数据
 			OrderInfo::<T>::insert(&order_index, order.clone());
 			//获得用户索引个数
@@ -282,7 +265,7 @@ pub mod pallet {
 			//创建订单标志位
 			NewOrder::<T>::put(true);
 			//发送订单创建事件
-			Self::deposit_event(Event::OrderCreated(order.index,order.cid,order.account_id,order.file_name,
+			Self::deposit_event(Event::OrderCreated(order.price,order.account_id,order.index,order.cid,order.file_name,
 													order.storage_deadline,order.file_size));
 			// Return a successful DispatchResultWithPostInfo
 			Ok(())
@@ -356,7 +339,7 @@ impl<T: Config> Pallet<T> {
 						// 退款
 						T::PaymentInterface::cancel_order(&order_index,&order_info.account_id);
 						//发送订单取消时间事件
-						Self::deposit_event(Event::OrderCanceled(order_index.clone() , order_info.cid));
+						Self::deposit_event(Event::OrderCanceled(order_info.price, order_info.account_id, order_index.clone(), order_info.cid));
 					}
 				},
 				None => ()
@@ -520,6 +503,8 @@ impl<T: Config> StorageOrderInterface for Pallet<T> {
 				order_info.status = StorageOrderStatus::Finished;
 				let count = ValidFilesCount::<T>::get();
 				ValidFilesCount::<T>::put(count + 1);
+				//当订单从pending中变为finished时将暂存池中的订单金额交易到不同的金额池中
+				T::PaymentInterface::transfer_reserved_and_storage_and_staking_pool_by_temporary_pool(order_index);
 			}
 			//订单信息副本数+1
 			order_info.replication = order_info.replication + 1;
@@ -540,16 +525,13 @@ impl<T: Config> StorageOrderInterface for Pallet<T> {
 			//订单信息副本数-1
 			if order_info.replication > 0 {
 				order_info.replication = order_info.replication - 1;
-				let replication_count = TotalCopies::<T>::get();
-				TotalCopies::<T>::put(replication_count - 1);
-			}
-			if order_info.replication == 0 {
-				if  ValidFilesCount::<T>::get() > 0{
-					let count = ValidFilesCount::<T>::get();
-					ValidFilesCount::<T>::put(count - 1);
+				TotalCopies::<T>::mutate(|count| {*count = count.saturating_sub(1)});
+				// 如果副本为0则有效副本-1
+				if order_info.replication == 0 {
+					ValidFilesCount::<T>::mutate(|count| {*count = count.saturating_sub(1)} );
 				}
+				OrderInfo::<T>::insert(order_index,order_info);
 			}
-			OrderInfo::<T>::insert(order_index,order_info);
 		}
 	}
 	/// 将订单改为已清算状态
@@ -559,10 +541,13 @@ impl<T: Config> StorageOrderInterface for Pallet<T> {
 			//如果为已完成则进入已清算
 			if let StorageOrderStatus::Finished = order_info.status {
 				//订单状态修改
+				let replication = order_info.replication;
 				order_info.status = StorageOrderStatus::Cleared;
 				OrderInfo::<T>::insert(order_index,order_info);
 				//订单有效文件-1
 				ValidFilesCount::<T>::mutate(|count| {*count = count.saturating_sub(1)} );
+				//减去订单副本数
+				TotalCopies::<T>::mutate(|count| {*count = count.saturating_sub(replication as u64)});
 			}
 		}
 	}

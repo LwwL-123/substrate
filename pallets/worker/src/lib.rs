@@ -15,11 +15,12 @@ use frame_support::{
 	}
 };
 use sp_runtime::traits::{Convert, Zero};
-
+use sp_runtime::Perbill;
 use primitives::p_storage_order::StorageOrderInterface;
 use primitives::p_storage_order::StorageOrderStatus;
 use primitives::p_worker::*;
 use primitives::p_benefit::BenefitInterface;
+use primitives::p_payment::PaymentInterface;
 
 mod zk;
 
@@ -62,17 +63,26 @@ pub mod pallet {
 		/// 金额转换数字
 		type BalanceToNumber: Convert<BalanceOf<Self>, u128>;
 
+		/// 数字转金额
+		type NumberToBalance: Convert<u128,BalanceOf<Self>>;
+
 		/// 订单接口
 		type StorageOrderInterface: StorageOrderInterface<AccountId = Self::AccountId, BlockNumber = Self::BlockNumber>;
 
 		/// 平均收益限额
-		type AverageIncomeLimit: Get<u8>;
+		type NumberOfIncomeMiner: Get<usize>;
 
 		/// 工作量证明上报接口
 		type Works: Works<Self::AccountId>;
 
 		/// 折扣接口
 		type BenefitInterface: BenefitInterface<Self::AccountId, BalanceOf<Self>, NegativeImbalanceOf<Self>>;
+
+		/// 订单支付接口
+		type PaymentInterface: PaymentInterface<AccountId = Self::AccountId, BlockNumber = Self::BlockNumber,Balance = BalanceOf<Self>>;
+
+		/// 存储池分配比率
+		type StorageRatio: Get<Perbill>;
 	}
 
 	/// 矿工个数
@@ -406,7 +416,7 @@ impl<T: Config> Pallet<T> {
 			return;
 		}
 		//判断当前矿工是否在收益列表 如果是则进行修改
-		if miners.len() < (T::AverageIncomeLimit::get() - 1)  as usize {
+		if miners.len() < T::NumberOfIncomeMiner::get() - 1 {
 			MinerOrderIncome::<T>::insert(&miner,order_index,true);
 		}
 		//添加订单信息
@@ -420,7 +430,7 @@ impl<T: Config> Pallet<T> {
 		let mut miners = MinerSetOfOrder::<T>::get(order_index);
 		//查询当前订单是否在收益列表中 如果在则将其去除并将第11位存入收益列表
 		if MinerOrderIncome::<T>::get(miner,order_index) {
-			let i = T::AverageIncomeLimit::get() as usize;
+			let i = T::NumberOfIncomeMiner::get();
 			if let Some(other_miner) = miners.get(i) {
 				MinerOrderIncome::<T>::insert(other_miner,order_index,true);
 			}
@@ -458,8 +468,21 @@ impl<T: Config> Pallet<T> {
 			for index in sub_orders {
 				match T::StorageOrderInterface::get_storage_order(index){
 					Some(t) => {
+						//当前收益标志位
 						let income_flag = MinerOrderIncome::<T>::get(account_id,index);
-						list.push(MinerOrder::new(t,income_flag));
+						//当前预估收益
+						let mut estimated_income = 0;
+						//获得当前订单存储人数
+						let target_reward_count = MinerSetOfOrder::<T>::get(index).len().min(T::NumberOfIncomeMiner::get()) as u128;
+						if target_reward_count > 0 && income_flag {
+							//通过当前订单金额进行计算预估收益 （订单金额×存储金额比率 + 小费） /订单存储人数
+							let income = (T::StorageRatio::get() * T::NumberToBalance::convert(t.order_price) + T::NumberToBalance::convert(t.tips)) / T::NumberToBalance::convert(target_reward_count);
+							estimated_income = T::BalanceToNumber::convert(income);
+						}
+						//查询当前清算价格
+						let calculate_income = T::PaymentInterface::get_calculate_income_by_miner_and_order_index(account_id, index);
+						let calculate_income = T::BalanceToNumber::convert(calculate_income);
+						list.push(MinerOrder::new(t,estimated_income, calculate_income));
 					},
 					None => ()
 				}

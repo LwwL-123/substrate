@@ -7926,6 +7926,7 @@ dependencies = [
  "serde",
  "sp-api",
  "sp-blockchain",
+ "sp-rpc",
  "sp-runtime",
  "storage-order-runtime-api",
 ]
@@ -9571,7 +9572,7 @@ dependencies = [
 [[package]]
 name = "zkp-u256"
 version = "0.2.0"
-source = "git+https://github.com/patractlabs/OpenZKP?branch=master#a71c96e23a2a831bb2c97268bb1113480c42876b"
+source = "git+https://gitee.com/lzw657434763/OpenZKP.git?branch=master#a71c96e23a2a831bb2c97268bb1113480c42876b"
 dependencies = [
  "crunchy",
  "hex",

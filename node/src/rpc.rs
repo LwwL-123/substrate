@@ -95,7 +95,7 @@ pub fn create_full<C, P ,SC, B>(
 	C::Api: pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance>,
 	C::Api: BlockBuilder<Block>,
 	C::Api: BabeApi<Block>,
-	C::Api: storage_order_rpc::StorageRuntimeApi<Block, AccountId, BlockNumber>,
+	C::Api: storage_order_rpc::StorageRuntimeApi<Block, AccountId, BlockNumber, Balance>,
 	C::Api: worker_rpc::WorkerRuntimeApi<Block, AccountId, BlockNumber>,
 	P: TransactionPool + 'static,
 	SC: SelectChain<Block> +'static,

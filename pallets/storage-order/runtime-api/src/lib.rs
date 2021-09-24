@@ -9,10 +9,12 @@ use codec::Codec;
 
 sp_api::decl_runtime_apis! {
 
-    pub trait StorageOrderApi<AccountId,BlockNumber> where
+    pub trait StorageOrderApi<AccountId,BlockNumber,Balance> where
         AccountId: Codec,
-        BlockNumber: Codec
+        BlockNumber: Codec,
+        Balance: Codec
     {
         fn page_user_order(account_id: AccountId, current: u64, size: u64, sort: u8) -> OrderPage<AccountId,BlockNumber>;
+        fn get_order_price(file_size: u64,duration: BlockNumber) -> (Balance,Balance);
     }
 }

@@ -49,6 +49,11 @@ default-features = false
 path = '../runtime-api'
 version = '3.0.0'
 
+[dependencies.sp-rpc]
+git = 'https://gitee.com/mohaijiang/substrate.git'
+tag = 'monthly-2021-07'
+version = '3.0.0'
+
 [features]
 default = ["std"]
 std = [

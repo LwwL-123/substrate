@@ -48,6 +48,15 @@ pub struct StorageOrder<AccountId, BlockNumber> {
     /// 支付价格
     #[cfg_attr(feature = "std", serde(serialize_with = "string_serialize"))]
     pub price: u128,
+    /// 文件基本价格
+    #[cfg_attr(feature = "std", serde(serialize_with = "string_serialize"))]
+    pub file_base_price: u128,
+    /// 文件存储价格
+    #[cfg_attr(feature = "std", serde(serialize_with = "string_serialize"))]
+    pub order_price: u128,
+    /// 小费
+    #[cfg_attr(feature = "std", serde(serialize_with = "string_serialize"))]
+    pub tips: u128,
     /// 存储期限
     pub storage_deadline: BlockNumber,
     /// 文件大小
@@ -65,13 +74,17 @@ pub struct StorageOrder<AccountId, BlockNumber> {
 impl<AccountId, BlockNumber> StorageOrder<AccountId, BlockNumber> {
 
     pub fn new (index: u64, cid: Vec<u8>, account_id: AccountId, file_name: Vec<u8>,
-            price: u128, storage_deadline: BlockNumber, file_size: u64, block_number: BlockNumber) -> Self {
+                price: u128, file_base_price: u128,order_price: u128,tips: u128,
+                storage_deadline: BlockNumber, file_size: u64, block_number: BlockNumber) -> Self {
         StorageOrder {
             index,
             cid,
             account_id,
             file_name,
             price,
+            file_base_price,
+            order_price,
+            tips,
             storage_deadline,
             file_size,
             block_number,

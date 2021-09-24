@@ -75,6 +75,7 @@ pub fn development_config() -> Result<ChainSpec, String> {
 				get_account_id_from_seed::<sr25519::Public>("Ferdie//stash"),
 			],
 			true,
+
 		),
 		// Bootnodes
 		vec![],
@@ -211,6 +212,10 @@ pub fn ttc_testnet_config() -> Result<ChainSpec, String> {
 						 hex!["9e19d291982a538eb67521f809dffeb7695d1791f49fac4e95f1d1bafe67014f"].into(),
 						 // 5HHPKrFJhZF7fHvtagfZT25q7wsha3gUXx5CBvzWtoTpP6KF
 						 hex!["e6d8f9b41bc64362176fae74b510ff16de998a252a311f12f7d4f63c2c1b3f05"].into(),
+						 // ttc初始账户
+						 // 5CDkYj2QVm2VkMiAwC3P5dMoCuNyHm1gx2wvrmGdbxQdTCbu
+						 hex!["06e6441fe8e2809044fe6850739b4a5584f78f1425ab7403f8737337f8d6ab7e"].into(),
+
 			],
 			true,
 		),
@@ -255,7 +260,13 @@ fn testnet_genesis(
 		},
 		balances: BalancesConfig {
 			// Configure endowed accounts with initial balance of 1 << 60.
-			balances: endowed_accounts.iter().cloned().map(|k|(k, 1 << 80)).collect(),
+			balances:
+				endowed_accounts.iter().cloned().map(|k|
+					if k != hex!["06e6441fe8e2809044fe6850739b4a5584f78f1425ab7403f8737337f8d6ab7e"].into() {
+						(k,1000_000_000_000_000)
+					}else {
+						(k,20_000_000_000_000_000_000)
+					}).collect(),
 		},
 		babe: BabeConfig {
 			authorities: vec![],
@@ -279,7 +290,7 @@ fn testnet_genesis(
 			}).collect::<Vec<_>>(),
 		},
 		staking: StakingConfig {
-			validator_count: initial_authorities.len() as u32 * 2,
+			validator_count: 10,
 			minimum_validator_count: initial_authorities.len() as u32,
 			stakers: initial_authorities.iter().map(|x| {
 				(x.0.clone(), x.1.clone(), STASH, StakerStatus::Validator)
